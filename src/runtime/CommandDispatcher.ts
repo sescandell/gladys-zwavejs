@@ -64,10 +64,14 @@ export class CommandDispatcher {
       )
     } else {
       // https://zwave-js.github.io/zwave-js-ui/#/guide/mqtt?id=writevalue
-      this.options.publish(
-        topics.writeValue,
-        JSON.stringify({ args: [{ ...target, property: command.name }, command.args[0]] }),
-      )
+      const valueId = {
+        ...target,
+        property: command.name,
+        // Only carried when the property exists several times on the command
+        // class (thermostat setpoints); omitted otherwise, as zwave-js expects.
+        ...(command.propertyKey === undefined ? {} : { propertyKey: command.propertyKey }),
+      }
+      this.options.publish(topics.writeValue, JSON.stringify({ args: [valueId, command.args[0]] }))
     }
 
     this.applySiblingStates(parsed, resolved.propertyKeyName, command.stateUpdates)

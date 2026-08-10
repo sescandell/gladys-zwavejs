@@ -25,7 +25,11 @@ export const centralScene: CommandClassModule = {
               category: DEVICE_FEATURE_CATEGORIES.BUTTON,
               type: DEVICE_FEATURE_TYPES.BUTTON.CLICK,
               min: 0,
-              max: 4,
+              // The bound covers the BUTTON_STATUS scale, not the raw Z-Wave
+              // scene values: `fromZwave` publishes statuses (a hold is 5, a
+              // triple 18, a release 20). Same convention as the Matter
+              // integration, which declares 0-84 for a click feature.
+              max: 84,
               read_only: true,
               has_feedback: true,
               keep_history: false,

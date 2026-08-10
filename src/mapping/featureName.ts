@@ -10,16 +10,16 @@ import type { ZwaveValue } from '../types/zwave.ts'
  */
 export function buildFeatureName(value: ZwaveValue, exposedName: string): string {
   const { propertyKey, propertyKeyName } = value
-  let name = `${value.id}${exposedName === '' ? '' : `:${exposedName}`}`
+  let base = String(value.id)
 
-  if (
-    propertyKey &&
-    propertyKeyName &&
-    propertyKeyName !== propertyKey &&
-    name.includes(String(propertyKey))
-  ) {
-    name = name.replace(String(propertyKey), String(propertyKeyName))
+  // The property key is always the LAST segment of the id, so the substitution
+  // is anchored there. Searching for the first occurrence instead would match
+  // digits appearing earlier: on `255-67-1-setpoint-1` the key `1` is also the
+  // endpoint, and a naive replace produces `255-67-Heating-setpoint-1`.
+  const key = propertyKey === undefined || propertyKey === null ? '' : String(propertyKey)
+  if (key !== '' && propertyKeyName && propertyKeyName !== propertyKey && base.endsWith(key)) {
+    base = `${base.slice(0, -key.length)}${propertyKeyName}`
   }
 
-  return name
+  return `${base}${exposedName === '' ? '' : `:${exposedName}`}`
 }

@@ -10,6 +10,9 @@ const BUDGET_WINDOW_MS = 60_000
 /** How long states accumulate before being sent as one batch. */
 const FLUSH_DELAY_MS = 200
 
+/** Retry delay once the budget is spent — no point re-checking every 200 ms. */
+const BUDGET_RETRY_DELAY_MS = 1000
+
 /** Above this, the queue is considered stuck and gets degraded (see `degrade`). */
 const QUEUE_HIGH_WATER_MARK = MAX_STATES_PER_MINUTE
 
@@ -30,6 +33,11 @@ interface QueuedState {
   readonly featureExternalId: string
   state: number
   readonly sampled: boolean
+  /**
+   * Carried all the way to the wire: an event is an occurrence, not a value,
+   * so neither the requeue nor the degradation may collapse two of them.
+   */
+  readonly event: boolean
 }
 
 /**
@@ -104,6 +112,7 @@ export class StatePublisher {
           featureExternalId: pending.featureExternalId,
           state: pending.state,
           sampled: pending.sampled,
+          event: pending.event,
         })
       }
       queued = true
@@ -121,12 +130,16 @@ export class StatePublisher {
     }
     this.clearTimer()
     this.flushing = true
+    // Scheduling happens in the `finally`: `schedule()` refuses to arm a timer
+    // while a flush is running, so asking for a retry from inside the loop
+    // would leave the queue stranded until an unrelated push came along.
+    let retryIn: number | undefined
     try {
       while (this.queue.length > 0) {
         const budget = this.availableBudget()
         if (budget <= 0) {
           this.degrade()
-          this.schedule()
+          retryIn = BUDGET_RETRY_DELAY_MS
           return
         }
         const size = Math.min(budget, MAX_STATES_PER_REQUEST, this.queue.length)
@@ -151,17 +164,28 @@ export class StatePublisher {
         } catch (error) {
           this.options.logger.warn(`Failed to publish ${batch.length} states, requeueing`, error)
           this.requeue(batch)
-          this.schedule()
+          retryIn = FLUSH_DELAY_MS
           return
         }
       }
     } finally {
       this.flushing = false
+      if (retryIn !== undefined) {
+        this.schedule(retryIn)
+      }
     }
   }
 
-  /** Stop the pending timer (shutdown, disconnection). */
-  stop(): void {
+  /**
+   * Drain what can still be sent, then stop. Called on shutdown and on a
+   * Gladys disconnection: without the drain, the sibling states of a command
+   * that was just accepted would die with the process.
+   */
+  async stop(): Promise<void> {
+    this.clearTimer()
+    await this.flush().catch(() => {
+      // Best effort: we are on our way out.
+    })
     this.clearTimer()
   }
 
@@ -170,14 +194,14 @@ export class StatePublisher {
     this.lastPublished.clear()
   }
 
-  private schedule(): void {
+  private schedule(delay: number = FLUSH_DELAY_MS): void {
     if (this.timer || this.flushing) {
       return
     }
     this.timer = setTimeout(() => {
       this.timer = undefined
       void this.flush()
-    }, FLUSH_DELAY_MS)
+    }, delay)
     // Never hold the process open just to drain states.
     this.timer.unref?.()
   }
@@ -201,10 +225,14 @@ export class StatePublisher {
   }
 
   private requeue(batch: QueuedState[]): void {
-    // Back in front, but never over a fresher value of the same feature.
-    const superseded = new Set(this.queue.map((entry) => entry.featureExternalId))
+    // Back in front, but never over a fresher value of the same feature —
+    // except for events, where each entry is a distinct occurrence that a
+    // newer one does not replace.
+    const superseded = new Set(
+      this.queue.filter((entry) => !entry.event).map((entry) => entry.featureExternalId),
+    )
     this.queue = [
-      ...batch.filter((entry) => !superseded.has(entry.featureExternalId)),
+      ...batch.filter((entry) => entry.event || !superseded.has(entry.featureExternalId)),
       ...this.queue,
     ]
     this.reindex()
@@ -226,7 +254,7 @@ export class StatePublisher {
    * ones. We keep the FIRST and the LAST value of each: the first because it
    * is the transition that started the movement, the last because it is where
    * the device ended up. Intermediate positions are lost — never the final
-   * state, and never an event, which is not queued as progressive.
+   * state, and never an event, which is exempt from the thinning entirely.
    *
    * This is a deliberate, logged trade-off, not a silent drop.
    */
@@ -238,6 +266,9 @@ export class StatePublisher {
     const firstIndex = new Map<string, number>()
     const lastIndex = new Map<string, number>()
     for (const [index, entry] of this.queue.entries()) {
+      if (entry.event) {
+        continue
+      }
       if (!firstIndex.has(entry.featureExternalId)) {
         firstIndex.set(entry.featureExternalId, index)
       }
@@ -247,6 +278,9 @@ export class StatePublisher {
     const before = this.queue.length
     this.queue = this.queue.filter(
       (entry, index) =>
+        // Events are never thinned out: dropping the third of five button
+        // presses means a scene that should have run does not.
+        entry.event ||
         firstIndex.get(entry.featureExternalId) === index ||
         lastIndex.get(entry.featureExternalId) === index,
     )

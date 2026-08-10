@@ -75,6 +75,12 @@ export type ZwaveCommand = {
   /** Positional arguments for sendCommand, the single value for writeValue. */
   readonly args: readonly unknown[]
   readonly stateUpdates: readonly SiblingStateUpdate[]
+  /**
+   * Disambiguates a property that exists several times on the same command
+   * class — a thermostat carries one `setpoint` per setpoint type, and without
+   * the key the write lands on whichever one zwave-js picks.
+   */
+  readonly propertyKey?: string | number
 }
 
 /** Builds the MQTT command for a Gladys value. */
@@ -140,6 +146,13 @@ export function writeValue(
   property: string,
   value: unknown,
   stateUpdates: readonly SiblingStateUpdate[] = [],
+  propertyKey?: string | number,
 ): ZwaveCommand {
-  return { api: 'writeValue', name: property, args: [value], stateUpdates }
+  return {
+    api: 'writeValue',
+    name: property,
+    args: [value],
+    stateUpdates,
+    ...(propertyKey === undefined ? {} : { propertyKey }),
+  }
 }

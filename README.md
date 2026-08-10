@@ -33,6 +33,7 @@ src/
     topics.ts                   topic tree + subscriptions
     stateValues.ts              Gladys state enums the SDK does not export
     commandClasses/             ONE MODULE PER COMMAND CLASS
+                                (switches, sensors, meters, scenes, thermostat)
   mapping/
     DeviceMapper.ts             nodes -> devices, values -> states
     externalId.ts               build/parse of the external ids
@@ -60,6 +61,25 @@ one and STOP for the other.
 
 Adding support for a command class is adding one file and one line in
 `commandClasses/index.ts`.
+
+## Beyond the built-in service: thermostats
+
+The built-in `zwavejs-ui` service does not handle thermostats. This integration
+does, through Thermostat Mode (0x40), Operating State (0x42) and Setpoint
+(0x43) — the work of the abandoned
+[Gladys PR #2730](https://github.com/GladysAssistant/Gladys/pull/2730), ported
+onto the feature types the Gladys core has gained since.
+
+Two adjustments were needed rather than a straight port:
+
+- that PR added `AC_MODE.OFF` and `AC_MODE.ENERGY_HEAT` to the core and mapped
+  the mode onto an air-conditioning feature. Those enum values were never
+  merged, so the mode maps onto `THERMOSTAT.MODE` and the `THERMOSTAT_MODE`
+  values the core does have (off / heat / cool / auto). The Z-Wave "Energy Save
+  Heat" mode is consequently reported as heating — see the user docs;
+- writing a setpoint carries its `propertyKey`: a thermostat exposes several
+  setpoints under the same `setpoint` property, and without the key the write
+  lands on whichever one zwave-js resolves first.
 
 ## ISO functional
 

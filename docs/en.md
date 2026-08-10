@@ -63,6 +63,27 @@ Features are derived from the Z-Wave command classes a node exposes:
 | Meter                               | energy, power, voltage, current                       |
 | Central Scene                       | button clicks (single, double, triple, hold, release) |
 | Battery                             | level and low-battery flag                            |
+| Thermostat Mode                     | mode: off, heat, cool, auto                           |
+| Thermostat Setpoint                 | heating, cooling and energy-save setpoints            |
+| Thermostat Operating State          | what it is really doing: idle, heating, cooling       |
+
+### Thermostats
+
+A Z-Wave thermostat exposes up to three distinct setpoints — heating, cooling
+and energy save — and each becomes its own temperature feature in Gladys. The
+**mode** is what the device is asked to do; the **operating state** is what it
+is actually doing: a thermostat set to Heat goes idle once the room is warm
+enough.
+
+One limitation worth knowing: the Z-Wave "Energy Save Heat" mode has no Gladys
+equivalent. It is therefore **reported as Heating** — which is what the device
+is doing — but selecting Heating from Gladys switches the thermostat from
+energy-save to plain heating. The energy-save temperature itself stays
+adjustable through its own setpoint.
+
+The modes offered in the UI are Off, Heat, Cool and Auto. Z-Wave does not
+reliably advertise which modes a device supports, so a heat-only thermostat
+still shows Cool and Auto, and ignores them.
 
 A node exposing something else still appears in Discovery — only the features
 above are created.

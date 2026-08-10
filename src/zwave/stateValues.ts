@@ -30,6 +30,24 @@ export const COVER_STATE = {
   CLOSE: -1,
 } as const
 
+/**
+ * Thermostat modes Gladys knows how to render. Z-Wave also defines an
+ * "Energy Save Heat" mode that has no Gladys equivalent — see thermostatMode.
+ */
+export const THERMOSTAT_MODE = {
+  OFF: 0,
+  HEATING: 1,
+  COOLING: 2,
+  AUTO: 3,
+} as const
+
+/** What the thermostat is doing right now, as opposed to what it was asked. */
+export const THERMOSTAT_OPERATING_STATE = {
+  IDLE: 0,
+  HEATING: 1,
+  COOLING: 2,
+} as const
+
 /** Opening sensor state — inverted compared to STATE: OPEN is 0. */
 export const OPENING_SENSOR_STATE = {
   OPEN: 0,

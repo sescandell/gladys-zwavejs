@@ -32,6 +32,17 @@ function readString(config: IntegrationConfig, key: keyof typeof DEFAULT_CONFIG)
 }
 
 /**
+ * Read a value VERBATIM. A password may legitimately start or end with a
+ * space, and trimming it turns a valid credential into an authentication
+ * failure the user cannot diagnose — the field is a secret, so they cannot
+ * even look at what was stored.
+ */
+function readSecret(config: IntegrationConfig, key: keyof typeof DEFAULT_CONFIG): string {
+  const value = config[key]
+  return typeof value === 'string' && value !== '' ? value : DEFAULT_CONFIG[key]
+}
+
+/**
  * Resolve where the MQTT broker is.
  *
  * This indirection is the whole reason `ZwaveJsUiClient` never reads the
@@ -49,7 +60,7 @@ export function resolveBroker(
     return undefined
   }
   const username = readString(config, 'mqtt_username')
-  const password = readString(config, 'mqtt_password')
+  const password = readSecret(config, 'mqtt_password')
   return {
     url,
     username: username === '' ? undefined : username,

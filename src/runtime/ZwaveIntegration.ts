@@ -26,6 +26,9 @@ const NODE_REFRESH_EVENTS = new Set(['node_ready', 'node_added', 'node_available
 const NODE_REMOVED_EVENT = 'node_removed'
 const NODE_VALUE_UPDATED_EVENT = 'node_value_updated'
 
+/** Coalescing window for discovery publications (node event bursts). */
+const DISCOVERY_DEBOUNCE_MS = 500
+
 const NOT_CONFIGURED: MultiLanguageMessage = {
   en: 'MQTT broker not configured. Fill in the connection settings below.',
   fr: 'Broker MQTT non configuré. Renseignez les paramètres de connexion ci-dessous.',
@@ -46,8 +49,16 @@ export class ZwaveIntegration {
   private readonly commands: CommandDispatcher
   private readonly client: ZwaveJsUiClient
 
-  /** Features of the devices the user actually created — the state filter. */
+  /**
+   * Feature ids per device, so an update REPLACES that device's set. Unioning
+   * would keep forwarding states for a feature the user removed, burning the
+   * 300/minute budget the remaining features need.
+   */
+  private featuresByDevice = new Map<string, Set<string>>()
   private knownFeatures = new Set<string>()
+  private discoveryTimer: NodeJS.Timeout | undefined
+  private publishingDiscovery = false
+  private discoveryPending = false
   private broker: BrokerSettings | undefined
   private topics: Topics
 
@@ -101,7 +112,12 @@ export class ZwaveIntegration {
   }
 
   async stop(): Promise<void> {
-    this.states.stop()
+    if (this.discoveryTimer) {
+      clearTimeout(this.discoveryTimer)
+      this.discoveryTimer = undefined
+    }
+    // Drains what is still publishable before the socket goes away.
+    await this.states.stop()
     await this.client.close()
   }
 
@@ -127,9 +143,22 @@ export class ZwaveIntegration {
     }
 
     this.broker = broker
-    // Always reopens: `open` closes the previous client first, so repeated
-    // saves cannot pile up connections.
-    await this.client.open(broker, topics)
+    try {
+      // Always reopens: `open` closes the previous client first, so repeated
+      // saves cannot pile up connections.
+      await this.client.open(broker, topics)
+    } catch (error) {
+      // `mqtt.connect` throws synchronously on a malformed URL (a missing
+      // `mqtt://` scheme, typically). The SDK swallows handler errors into a
+      // debug line, so without this the user saves the form and sees strictly
+      // nothing: no status, no log, no device.
+      const reason = error instanceof Error ? error.message : String(error)
+      this.logger.error(`Cannot open the MQTT connection to ${broker.url}: ${reason}`)
+      await this.setStatus(false, {
+        en: `Invalid MQTT broker settings (${reason}). Check the URL includes a protocol, e.g. mqtt://host:1883.`,
+        fr: `Paramètres du broker MQTT invalides (${reason}). Vérifiez que l'URL comporte un protocole, par exemple mqtt://hote:1883.`,
+      })
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -198,7 +227,7 @@ export class ZwaveIntegration {
       return
     }
     this.registry.upsert(node)
-    void this.publishDiscovered()
+    this.requestDiscoveryPublication()
   }
 
   private onNodeRemoved(message: NodeEvent): void {
@@ -207,7 +236,7 @@ export class ZwaveIntegration {
       return
     }
     this.registry.remove(node.id)
-    void this.publishDiscovered()
+    this.requestDiscoveryPublication()
   }
 
   // -------------------------------------------------------------------------
@@ -229,7 +258,7 @@ export class ZwaveIntegration {
    * waking up every few hours, is a long time to stare at an empty widget.
    */
   onDeviceCreated(device: Device): void {
-    this.addKnownFeatures(device)
+    this.setDeviceFeatures(device)
     const node = this.findNode(device)
     if (node) {
       this.states.push(this.mapper.snapshot(node))
@@ -237,13 +266,12 @@ export class ZwaveIntegration {
   }
 
   onDeviceUpdated(device: Device): void {
-    this.addKnownFeatures(device)
+    this.setDeviceFeatures(device)
   }
 
   onDeviceDeleted(device: Device): void {
-    for (const feature of device.features ?? []) {
-      this.knownFeatures.delete(feature.external_id)
-    }
+    this.featuresByDevice.delete(device.external_id)
+    this.rebuildKnownFeatures()
   }
 
   /** Manifest action: report what the integration currently sees. */
@@ -268,13 +296,46 @@ export class ZwaveIntegration {
   // Helpers
   // -------------------------------------------------------------------------
 
+  /**
+   * Publishing REPLACES the previous list, so two publications in flight race
+   * and the loser wins — a burst of `node_ready` at startup would otherwise
+   * fire one full POST per node and could leave the discovery screen showing
+   * a snapshot taken when only a third of the network was known.
+   *
+   * Debounced, and never more than one in flight; a request arriving during a
+   * publication schedules exactly one more.
+   */
+  private requestDiscoveryPublication(): void {
+    if (this.discoveryTimer) {
+      return
+    }
+    this.discoveryTimer = setTimeout(() => {
+      this.discoveryTimer = undefined
+      void this.publishDiscovered()
+    }, DISCOVERY_DEBOUNCE_MS)
+    this.discoveryTimer.unref?.()
+  }
+
   private async publishDiscovered(): Promise<void> {
-    const devices = this.mapper.toDiscoveredDevices(this.registry.all())
+    if (this.publishingDiscovery) {
+      this.discoveryPending = true
+      return
+    }
+    this.publishingDiscovery = true
     try {
-      await this.gladys.publishDiscoveredDevices(devices)
-      this.logger.info(`Published ${devices.length} discovered device(s)`)
-    } catch (error) {
-      this.logger.error('Failed to publish the discovered devices', error)
+      do {
+        this.discoveryPending = false
+        const devices = this.mapper.toDiscoveredDevices(this.registry.all())
+        try {
+          // oxlint-disable-next-line no-await-in-loop
+          await this.gladys.publishDiscoveredDevices(devices)
+          this.logger.info(`Published ${devices.length} discovered device(s)`)
+        } catch (error) {
+          this.logger.error('Failed to publish the discovered devices', error)
+        }
+      } while (this.discoveryPending)
+    } finally {
+      this.publishingDiscovery = false
     }
   }
 
@@ -285,15 +346,31 @@ export class ZwaveIntegration {
   }
 
   private refreshKnownFeatures(devices: readonly Device[]): void {
-    this.knownFeatures = new Set(
-      devices.flatMap((device) => (device.features ?? []).map((feature) => feature.external_id)),
+    this.featuresByDevice = new Map(
+      devices.map((device) => [
+        device.external_id,
+        new Set((device.features ?? []).map((feature) => feature.external_id)),
+      ]),
     )
+    this.rebuildKnownFeatures()
   }
 
-  private addKnownFeatures(device: Device): void {
-    for (const feature of device.features ?? []) {
-      this.knownFeatures.add(feature.external_id)
+  private setDeviceFeatures(device: Device): void {
+    this.featuresByDevice.set(
+      device.external_id,
+      new Set((device.features ?? []).map((feature) => feature.external_id)),
+    )
+    this.rebuildKnownFeatures()
+  }
+
+  private rebuildKnownFeatures(): void {
+    const all = new Set<string>()
+    for (const features of this.featuresByDevice.values()) {
+      for (const externalId of features) {
+        all.add(externalId)
+      }
     }
+    this.knownFeatures = all
   }
 
   private async setStatus(connected: boolean, message?: MultiLanguageMessage): Promise<void> {

@@ -56,6 +56,7 @@ export class DeviceMapper {
         mapped.push({
           feature: this.buildFeature(node, value, exposed, spec),
           commandClass: value.commandClass,
+          endpoint: value.endpoint ?? 0,
           propertyName: value.propertyName,
         })
       }

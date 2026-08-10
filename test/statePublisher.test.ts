@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { setTimeout } from 'node:timers/promises'
 
 import { StatePublisher } from '../src/runtime/StatePublisher.ts'
 import type { PendingState } from '../src/runtime/state.ts'
@@ -183,5 +184,83 @@ test('a failed batch is requeued, unless a fresher value superseded it', async (
   assert.equal(publisher.states.length, 0)
 
   await states.flush()
+  assert.deepEqual(publisher.states, [{ device_feature_external_id: SHUTTER, state: 30 }])
+})
+
+test('a failed batch is retried on its own, without waiting for another push', async () => {
+  // The retry path used to arm nothing: `schedule()` refuses to set a timer
+  // while a flush is running, and both retry sites ran inside the flush. The
+  // queue then sat there until an unrelated state happened to arrive.
+  const { publisher, states } = setup([SHUTTER])
+  publisher.failNext(1)
+
+  states.push([state(SHUTTER, 30)])
+  await states.flush()
+  assert.equal(publisher.states.length, 0, 'the first attempt failed')
+
+  await setTimeout(400)
+
+  assert.deepEqual(publisher.states, [{ device_feature_external_id: SHUTTER, state: 30 }])
+})
+
+test('a requeued button press is not swallowed by a press that arrived meanwhile', async () => {
+  // The window is narrow but real: the second press has to land WHILE the
+  // first is in flight, so that the queue is non-empty when the failure
+  // requeues it. Requeue used to treat any queued entry for the same feature
+  // as superseding — true for a value, false for an occurrence.
+  const sent: number[][] = []
+  const logger = createFakeLogger()
+  let failed = false
+  const publisher = {
+    publish: async (batch: Array<{ state?: number }>) => {
+      if (!failed) {
+        failed = true
+        // A press arrives while this batch is being published.
+        states.push([state(BUTTON, 1, { event: true })])
+        throw new Error('boom')
+      }
+      sent.push(batch.map((entry) => entry.state as number))
+    },
+  }
+  const states = new StatePublisher({
+    logger,
+    publish: publisher.publish,
+    knownFeatures: () => new Set([BUTTON]),
+  })
+
+  states.push([state(BUTTON, 1, { event: true })])
+  await states.flush()
+  await states.flush()
+
+  assert.deepEqual(sent.flat(), [1, 1], 'both presses must reach Gladys')
+})
+
+test('degrading a saturated queue never thins out button presses', async () => {
+  const filler = Array.from({ length: 300 }, (_, index) => `ext:test:1:0:battery:level:${index}`)
+  const { publisher, clock, states } = setup([...filler, SHUTTER, BUTTON])
+
+  states.push(filler.map((feature, index) => state(feature, index)))
+  await states.flush()
+
+  const flood: PendingState[] = []
+  for (let value = 0; value < 200; value += 1) {
+    flood.push(state(SHUTTER, value), state(BUTTON, 1, { event: true }))
+  }
+  states.push(flood)
+  await states.flush()
+
+  clock.advance(61_000)
+  await states.flush()
+
+  const presses = publisher.states.filter((entry) => entry.device_feature_external_id === BUTTON)
+  assert.equal(presses.length, 200, 'every press survives the degradation')
+})
+
+test('stop() drains what is still queued instead of dropping it', async () => {
+  const { publisher, states } = setup([SHUTTER])
+
+  states.push([state(SHUTTER, 30)])
+  await states.stop()
+
   assert.deepEqual(publisher.states, [{ device_feature_external_id: SHUTTER, state: 30 }])
 })

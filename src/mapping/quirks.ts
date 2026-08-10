@@ -5,6 +5,7 @@ import { clean } from './clean.ts'
 export interface MappedFeature<T> {
   readonly feature: T
   readonly commandClass: number
+  readonly endpoint: number
   readonly propertyName: string
 }
 
@@ -37,9 +38,16 @@ export function applyQuirks<T>(
   // virtual on/off from the Multilevel Switch anyway — and that one stays
   // synchronized with the position — we drop the explicit one rather than
   // show the user two on/off controls that behave differently.
-  if (result.some((f) => f.commandClass === COMMAND_CLASS.MULTILEVEL_SWITCH)) {
-    result = result.filter((f) => f.commandClass !== COMMAND_CLASS.BINARY_SWITCH)
-  }
+  //
+  // Scoped to the endpoint: on a device mixing a dimmer on one endpoint and a
+  // plain relay on another, the relay has no dimmer to be replaced by and
+  // would otherwise lose its only control.
+  const dimmerEndpoints = new Set(
+    result.filter((f) => f.commandClass === COMMAND_CLASS.MULTILEVEL_SWITCH).map((f) => f.endpoint),
+  )
+  result = result.filter(
+    (f) => f.commandClass !== COMMAND_CLASS.BINARY_SWITCH || !dimmerEndpoints.has(f.endpoint),
+  )
 
   // Fibaro Motion Sensor FGMS-001: its Alarm Sensor duplicates the motion
   // information without adding anything, and depending on the firmware the

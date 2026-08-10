@@ -33,6 +33,12 @@ export class ZwaveJsUiClient {
   private readonly options: ZwaveJsUiClientOptions
   private client: MqttClient | undefined
   private topics: Topics | undefined
+  /**
+   * Serializes open/close. Both yield to the event loop, so two overlapping
+   * calls would each see "no client" and each create one — the first left
+   * running, with its listeners still processing every message a second time.
+   */
+  private operations: Promise<void> = Promise.resolve()
 
   constructor(options: ZwaveJsUiClientOptions) {
     this.options = options
@@ -44,7 +50,26 @@ export class ZwaveJsUiClient {
 
   /** Open (or re-open) the link. Safe to call at any time, in any state. */
   async open(settings: BrokerSettings, topics: Topics): Promise<void> {
-    await this.close()
+    return this.enqueue(() => this.doOpen(settings, topics))
+  }
+
+  /** Close the link and drop every listener. */
+  async close(): Promise<void> {
+    return this.enqueue(() => this.doClose())
+  }
+
+  private async enqueue(operation: () => Promise<void>): Promise<void> {
+    // A failed operation must not break the chain for the next one.
+    const next = this.operations.then(operation, operation)
+    this.operations = next.then(
+      () => undefined,
+      () => undefined,
+    )
+    return next
+  }
+
+  private async doOpen(settings: BrokerSettings, topics: Topics): Promise<void> {
+    await this.doClose()
     this.topics = topics
 
     const { logger } = this.options
@@ -90,8 +115,7 @@ export class ZwaveJsUiClient {
     })
   }
 
-  /** Close the link and drop every listener. */
-  async close(): Promise<void> {
+  private async doClose(): Promise<void> {
     const client = this.client
     if (!client) {
       return

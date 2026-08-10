@@ -9,6 +9,9 @@ import { meter } from './meter.ts'
 import { multilevelSensor } from './multilevelSensor.ts'
 import { multilevelSwitch } from './multilevelSwitch.ts'
 import { notification } from './notification.ts'
+import { thermostatMode } from './thermostatMode.ts'
+import { thermostatOperatingState } from './thermostatOperatingState.ts'
+import { thermostatSetpoint } from './thermostatSetpoint.ts'
 import type { ActionBuilder, CommandClassModule, PropertyMap, PropertyVariant } from './types.ts'
 
 const MODULES: readonly CommandClassModule[] = [
@@ -21,6 +24,9 @@ const MODULES: readonly CommandClassModule[] = [
   notification,
   battery,
   alarmSensor,
+  thermostatMode,
+  thermostatOperatingState,
+  thermostatSetpoint,
 ]
 
 const BY_NAME = new Map(MODULES.map((module) => [module.name, module]))

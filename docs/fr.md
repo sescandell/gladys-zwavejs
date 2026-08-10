@@ -69,6 +69,28 @@ nœud :
 | Meter                         | énergie, puissance, tension, courant                         |
 | Central Scene                 | appuis de bouton (simple, double, triple, maintenu, relâché) |
 | Battery                       | niveau et indicateur de batterie faible                      |
+| Thermostat Mode               | mode : arrêt, chauffage, climatisation, automatique          |
+| Thermostat Setpoint           | consignes de chauffage, de climatisation et d'économie       |
+| Thermostat Operating State    | état réel : au repos, en chauffe, en refroidissement         |
+
+### Thermostats
+
+Un thermostat Z-Wave expose jusqu'à trois consignes distinctes — chauffage,
+climatisation et économie d'énergie — et chacune devient une fonctionnalité de
+température indépendante dans Gladys. Le **mode** dit ce que l'appareil doit
+faire, l'**état de fonctionnement** dit ce qu'il fait réellement : un
+thermostat en mode Chauffage passe au repos une fois la pièce à température.
+
+Une limite à connaître : le mode Z-Wave « Energy Save Heat » n'a pas
+d'équivalent dans Gladys. Il est donc **remonté comme Chauffage** — ce que fait
+l'appareil est exact — mais si vous sélectionnez Chauffage depuis Gladys, le
+thermostat quitte le mode économie pour le chauffage normal. La température
+d'économie, elle, reste réglable via sa propre consigne.
+
+Les modes proposés dans l'interface sont Arrêt, Chauffage, Climatisation et
+Automatique. Z-Wave n'indiquant pas de façon fiable les modes réellement
+supportés par un appareil, un thermostat qui ne sait que chauffer affichera
+quand même Climatisation et Automatique, et les ignorera.
 
 Un nœud exposant autre chose apparaît quand même dans la Découverte — seules
 les fonctionnalités ci-dessus sont créées.

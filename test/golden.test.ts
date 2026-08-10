@@ -21,6 +21,12 @@ import type { ZwaveNode } from '../src/types/zwave.ts'
  *   - the internal service carried extra in-memory fields on each feature
  *     (command_class, endpoint, property_name...) that were never persisted;
  *     the external integration resolves commands without them.
+ *
+ * On top of that, a SHORT and EXPLICIT list of deliberate divergences is
+ * declared below. The reference fixture is never regenerated: a divergence has
+ * to be written down here, with its reason, or the test fails. That is what
+ * keeps "we changed this on purpose" from decaying into "we broke this and
+ * refreshed the expectations".
  */
 
 const SELECTOR = 'ext-sescandell-gladys-zwavejs'
@@ -53,6 +59,33 @@ interface GoldenDevice {
   [key: string]: unknown
 }
 
+/**
+ * Deliberate departures from the internal service. Anything not listed here
+ * must match it exactly.
+ */
+const INTENTIONAL_DIVERGENCES: Array<{
+  reason: string
+  applies: (feature: GoldenFeature) => boolean
+  override: Record<string, unknown>
+}> = [
+  {
+    reason:
+      'The internal service declared max 4, the raw Z-Wave scene value, while the ' +
+      'converter publishes BUTTON_STATUS codes (hold 5, triple 18, release 20). ' +
+      '84 is the bound the Matter integration uses for a click feature.',
+    applies: (feature) => feature.category === 'button' && feature.type === 'click',
+    override: { max: 84 },
+  },
+  {
+    reason:
+      'The internal service declared min 0 while COVER_STATE.CLOSE is -1, so closing ' +
+      'a shutter sent a value below the feature bounds. -1 is what the Zigbee2mqtt ' +
+      'integration declares.',
+    applies: (feature) => feature.category === 'shutter' && feature.type === 'state',
+    override: { min: -1 },
+  },
+]
+
 /** Bring a golden device to the shape an external integration publishes. */
 function normalizeGolden(device: GoldenDevice) {
   const rewrite = (id: string) => id.replace(/^zwavejs-ui:/, `ext:${SELECTOR}:`)
@@ -65,6 +98,11 @@ function normalizeGolden(device: GoldenDevice) {
       for (const [key, value] of Object.entries(feature)) {
         if (!IN_MEMORY_ONLY.has(key)) {
           kept[key] = key === 'external_id' ? rewrite(value as string) : value
+        }
+      }
+      for (const divergence of INTENTIONAL_DIVERGENCES) {
+        if (divergence.applies(feature)) {
+          Object.assign(kept, divergence.override)
         }
       }
       return kept
@@ -84,6 +122,20 @@ test('the mapper reproduces the internal service device by device', () => {
   for (const [index, expected] of golden.entries()) {
     const actual = devices[index]
     assert.deepEqual(actual, normalizeGolden(expected), `device ${expected.external_id}`)
+  }
+})
+
+test('every declared divergence is actually exercised by the fixture', () => {
+  // A divergence nobody applies is a divergence nobody notices going stale:
+  // it would silently mask a future regression on that feature.
+  const golden = readFixture<GoldenDevice[]>('golden-devices.json')
+  const features = golden.flatMap((device) => device.features)
+
+  for (const divergence of INTENTIONAL_DIVERGENCES) {
+    assert.ok(
+      features.some((feature) => divergence.applies(feature)),
+      `no fixture feature matches: ${divergence.reason}`,
+    )
   }
 })
 

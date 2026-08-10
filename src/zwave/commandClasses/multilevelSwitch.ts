@@ -147,7 +147,9 @@ const shutterCurrentValue: PropertyVariant = {
       spec: {
         category: DEVICE_FEATURE_CATEGORIES.SHUTTER,
         type: DEVICE_FEATURE_TYPES.SHUTTER.STATE,
-        min: 0,
+        // COVER_STATE spans -1 (close) to 1 (open), 0 being stop. Same
+        // convention as the Zigbee2mqtt integration.
+        min: -1,
         max: 1,
         read_only: false,
         has_feedback: false,
