@@ -6,11 +6,13 @@
     "en": "Control your Z-Wave network in Gladys through Z-Wave JS UI and MQTT.",
     "fr": "Pilotez votre réseau Z-Wave dans Gladys via Z-Wave JS UI et MQTT."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/sescandell/gladys-zwavejs:1.0.0",
+  "version": "1.1.0",
+  "docker_image": "ghcr.io/sescandell/gladys-zwavejs:1.1.0",
   "gladys_version": ">=4.85.0",
   "cover_image": "https://raw.githubusercontent.com/Sescandell/gladys-zwavejs/master/cover.png",
-  "transports": ["local"],
+  "transports": [
+    "local"
+  ],
   "config_schema": [
     {
       "key": "intro",
@@ -26,11 +28,17 @@
       "links": [
         {
           "url": "https://zwave-js.github.io/zwave-js-ui/#/getting-started/quick-start",
-          "label": { "en": "Install Z-Wave JS UI", "fr": "Installer Z-Wave JS UI" }
+          "label": {
+            "en": "Install Z-Wave JS UI",
+            "fr": "Installer Z-Wave JS UI"
+          }
         },
         {
           "url": "https://zwave-js.github.io/zwave-js-ui/#/guide/mqtt",
-          "label": { "en": "Z-Wave JS UI MQTT gateway", "fr": "Passerelle MQTT de Z-Wave JS UI" }
+          "label": {
+            "en": "Z-Wave JS UI MQTT gateway",
+            "fr": "Passerelle MQTT de Z-Wave JS UI"
+          }
         }
       ]
     },
@@ -38,17 +46,26 @@
       "key": "mqtt_url",
       "type": "string",
       "required": true,
-      "label": { "en": "MQTT broker URL", "fr": "URL du broker MQTT" },
+      "label": {
+        "en": "MQTT broker URL",
+        "fr": "URL du broker MQTT"
+      },
       "description": {
         "en": "Address of the broker Z-Wave JS UI publishes to, protocol included.",
         "fr": "Adresse du broker sur lequel Z-Wave JS UI publie, protocole inclus."
       },
-      "placeholder": { "en": "mqtt://192.168.1.10:1883", "fr": "mqtt://192.168.1.10:1883" }
+      "placeholder": {
+        "en": "mqtt://192.168.1.10:1883",
+        "fr": "mqtt://192.168.1.10:1883"
+      }
     },
     {
       "key": "mqtt_username",
       "type": "string",
-      "label": { "en": "MQTT username", "fr": "Utilisateur MQTT" },
+      "label": {
+        "en": "MQTT username",
+        "fr": "Utilisateur MQTT"
+      },
       "description": {
         "en": "Leave empty if your broker accepts anonymous connections.",
         "fr": "Laissez vide si votre broker accepte les connexions anonymes."
@@ -57,12 +74,18 @@
     {
       "key": "mqtt_password",
       "type": "secret",
-      "label": { "en": "MQTT password", "fr": "Mot de passe MQTT" }
+      "label": {
+        "en": "MQTT password",
+        "fr": "Mot de passe MQTT"
+      }
     },
     {
       "key": "advanced",
       "type": "section",
-      "label": { "en": "Advanced", "fr": "Avancé" },
+      "label": {
+        "en": "Advanced",
+        "fr": "Avancé"
+      },
       "description": {
         "en": "Only change these if you renamed the MQTT gateway in Z-Wave JS UI. The defaults match a standard installation.",
         "fr": "À modifier uniquement si vous avez renommé la passerelle MQTT dans Z-Wave JS UI. Les valeurs par défaut correspondent à une installation standard."
@@ -72,7 +95,10 @@
       "key": "topic_prefix",
       "type": "string",
       "default": "zwave",
-      "label": { "en": "Topic prefix", "fr": "Préfixe des topics" },
+      "label": {
+        "en": "Topic prefix",
+        "fr": "Préfixe des topics"
+      },
       "description": {
         "en": "The \"Prefix\" field of the Z-Wave JS UI MQTT settings.",
         "fr": "Le champ « Prefix » des réglages MQTT de Z-Wave JS UI."
@@ -82,7 +108,10 @@
       "key": "gateway_name",
       "type": "string",
       "default": "ZWAVE_GATEWAY-zwave-js-ui",
-      "label": { "en": "Gateway name", "fr": "Nom de la passerelle" },
+      "label": {
+        "en": "Gateway name",
+        "fr": "Nom de la passerelle"
+      },
       "description": {
         "en": "Derived from the \"Name\" field of the Z-Wave JS UI general settings, prefixed with ZWAVE_GATEWAY-.",
         "fr": "Dérivé du champ « Name » des réglages généraux de Z-Wave JS UI, préfixé par ZWAVE_GATEWAY-."
@@ -93,7 +122,10 @@
     {
       "key": "test_connection",
       "timeout_seconds": 20,
-      "label": { "en": "Test the connection", "fr": "Tester la connexion" },
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion"
+      },
       "description": {
         "en": "Check the MQTT link and report how many Z-Wave nodes are known.",
         "fr": "Vérifie le lien MQTT et indique combien de nœuds Z-Wave sont connus."
