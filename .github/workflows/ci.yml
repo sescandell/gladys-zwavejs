@@ -1,0 +1,51 @@
+# -----------------------------------------------------------------------------
+# Continuous integration: runs on every push and every pull request.
+#
+# Four gates:
+#   1. tsc --noEmit -> type check (the ONLY thing tsc does here: Node runs the
+#      .ts sources directly, so a type error is the last line of defense before
+#      a crash inside the container);
+#   2. oxlint       -> catch real mistakes (undefined vars, dead code, ...);
+#   3. oxfmt        -> consistent formatting (no style debates in reviews);
+#   4. node --test  -> the built-in runner, including the golden test that
+#      asserts the mapping stays identical to the internal Gladys service.
+#
+# Runs on Node 24, the version the Docker image ships with (see the Dockerfile),
+# so the check exercises the exact runtime the integration runs on.
+# -----------------------------------------------------------------------------
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    name: Lint & test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check (tsc)
+        run: npm run typecheck
+
+      - name: Lint (oxlint)
+        run: npm run lint
+
+      - name: Check formatting (oxfmt)
+        run: npm run format:check
+
+      - name: Run tests
+        run: npm test

@@ -1,0 +1,81 @@
+import type { IntegrationConfig } from '@gladysassistant/integration-sdk'
+
+/**
+ * Configuration of the integration, mirroring the manifest `config_schema`.
+ * `manifest.test.ts` asserts the two stay in sync.
+ */
+export const DEFAULT_CONFIG = {
+  mqtt_url: '',
+  mqtt_username: '',
+  mqtt_password: '',
+  topic_prefix: 'zwave',
+  gateway_name: 'ZWAVE_GATEWAY-zwave-js-ui',
+} as const
+
+/** Everything needed to open the MQTT connection — and nothing else. */
+export interface BrokerSettings {
+  readonly url: string
+  readonly username: string | undefined
+  readonly password: string | undefined
+  readonly clientId: string
+}
+
+/** The two values that locate Z-Wave JS UI inside the broker's topic tree. */
+export interface TopicSettings {
+  readonly prefix: string
+  readonly gateway: string
+}
+
+function readString(config: IntegrationConfig, key: keyof typeof DEFAULT_CONFIG): string {
+  const value = config[key]
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : DEFAULT_CONFIG[key]
+}
+
+/**
+ * Resolve where the MQTT broker is.
+ *
+ * This indirection is the whole reason `ZwaveJsUiClient` never reads the
+ * configuration itself: the day the integration ships its own Mosquitto as a
+ * companion sub-container, only this function changes — it will return the
+ * private-network address and the credentials generated in /data, and every
+ * caller keeps working unchanged.
+ */
+export function resolveBroker(
+  config: IntegrationConfig,
+  selector: string,
+): BrokerSettings | undefined {
+  const url = readString(config, 'mqtt_url')
+  if (url === '') {
+    return undefined
+  }
+  const username = readString(config, 'mqtt_username')
+  const password = readString(config, 'mqtt_password')
+  return {
+    url,
+    username: username === '' ? undefined : username,
+    password: password === '' ? undefined : password,
+    // A stable, unique client id: two Gladys instances on the same broker must
+    // not fight over one session, and reconnecting must reuse the same id.
+    clientId: `gladys-${selector}`,
+  }
+}
+
+/**
+ * Resolve the topic coordinates. Configurable because Z-Wave JS UI lets the
+ * user rename its MQTT gateway and topic prefix, and the defaults only cover
+ * a stock installation.
+ */
+export function resolveTopics(config: IntegrationConfig): TopicSettings {
+  return {
+    prefix: readString(config, 'topic_prefix').replace(/\/+$/, ''),
+    gateway: readString(config, 'gateway_name'),
+  }
+}
+
+/** True when the two configurations would open the same connection. */
+export function sameBroker(a: BrokerSettings | undefined, b: BrokerSettings | undefined): boolean {
+  if (!a || !b) {
+    return a === b
+  }
+  return a.url === b.url && a.username === b.username && a.password === b.password
+}

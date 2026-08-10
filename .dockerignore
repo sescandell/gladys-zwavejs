@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log*
+.git
+.github
+.env
+.env.*
+data
+*.log
+.DS_Store
+README.md
+docs
+test
+tsconfig.json
+.oxlintrc.json
+.oxfmtrc.json

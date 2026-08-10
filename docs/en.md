@@ -1,0 +1,119 @@
+# Z-Wave JS UI
+
+Control your Z-Wave network from Gladys, through [Z-Wave JS UI](https://zwave-js.github.io/zwave-js-ui/)
+and an MQTT broker.
+
+This integration does **not** talk to your Z-Wave stick directly. Z-Wave JS UI
+owns the radio and the network management (inclusion, exclusion, healing,
+firmware updates); this integration turns the nodes it publishes into Gladys
+devices, and Gladys commands into Z-Wave commands.
+
+## What you need
+
+1. **Z-Wave JS UI**, running and already paired with your Z-Wave controller.
+2. **An MQTT broker** (Mosquitto, EMQX…) reachable from both Z-Wave JS UI and
+   Gladys.
+
+## Setting up Z-Wave JS UI
+
+In **Settings → Home Assistant / MQTT**:
+
+- fill in the **MQTT server URL**, and the username/password if your broker
+  requires them;
+- keep **Prefix** at its default (`zwave`), or note the value you chose;
+- note the **Name** of the gateway in **Settings → General** (default:
+  `zwave-js-ui`). The MQTT gateway name is that name prefixed with
+  `ZWAVE_GATEWAY-`, so the default is `ZWAVE_GATEWAY-zwave-js-ui`.
+
+## Configuring the integration
+
+In Gladys, open the integration's **Configuration** tab:
+
+1. **MQTT broker URL** — for example `mqtt://192.168.1.10:1883`.
+2. **MQTT username / password** — leave empty for an anonymous broker.
+3. Under **Advanced**, only change **Topic prefix** and **Gateway name** if you
+   changed them in Z-Wave JS UI.
+4. Save.
+
+Use **Test the connection** to check the link: it reports the broker it reached
+and how many Z-Wave nodes it can see.
+
+## Adding your devices
+
+Open the **Discovery** tab: every non-virtual Z-Wave node appears there, with
+the features this integration understands. Pick a room, adjust the name, and
+create the devices you want. **Scan** asks Z-Wave JS UI for a fresh node list —
+useful right after including a new device.
+
+A device you create is populated immediately from the last known values, so it
+is not blank while waiting for a battery sensor to wake up.
+
+## Supported devices
+
+Features are derived from the Z-Wave command classes a node exposes:
+
+| Command class                       | What you get in Gladys                                |
+| ----------------------------------- | ----------------------------------------------------- |
+| Binary Switch                       | on/off switch                                         |
+| Multilevel Switch (dimmer)          | brightness, on/off, "restore previous"                |
+| Multilevel Switch (window covering) | shutter position, open/close/stop                     |
+| Binary Sensor / Alarm Sensor        | motion, smoke, CO, CO₂, leak, opening, temperature    |
+| Notification                        | door/window opening                                   |
+| Multilevel Sensor                   | temperature, illuminance, power                       |
+| Meter                               | energy, power, voltage, current                       |
+| Central Scene                       | button clicks (single, double, triple, hold, release) |
+| Battery                             | level and low-battery flag                            |
+
+A node exposing something else still appears in Discovery — only the features
+above are created.
+
+## Troubleshooting
+
+**Nothing appears in Discovery.** Check the Configuration tab status. If it
+says the broker is unreachable, the URL or the credentials are wrong. If it is
+connected but no node shows up, the **Gateway name** or **Topic prefix**
+probably does not match your Z-Wave JS UI settings.
+
+**A device stopped updating.** Z-Wave JS UI is the source of truth: check the
+node is alive there first.
+
+**"State budget exhausted" in the logs.** Gladys accepts 300 states per minute
+per integration. A very chatty network (energy meters reporting every few
+seconds) can exceed it: the integration then keeps the first and last value of
+each feature and drops the intermediate ones. Reducing the report frequency of
+the noisiest devices in Z-Wave JS UI is the real fix.
+
+Set `LOG_LEVEL=debug` for verbose logs, readable from the integration's **Logs**
+tab.
+
+## Migrating from the built-in Z-Wave JS UI integration
+
+Gladys ships a built-in `zwavejs-ui` service. This external integration
+replaces it and produces the **same devices, features, categories, units and
+names**, so your history, scenes and dashboards can follow.
+
+1. Install and configure this integration.
+2. In the **Discovery** tab, create the devices matching the ones you already
+   have.
+3. Migrate each device, which moves its history and rewrites the references in
+   your scenes and dashboards. Until the built-in integration is flagged as
+   deprecated in Gladys, the migration has no button yet — call the API
+   directly, once per device:
+
+   ```
+   POST /api/v1/device/<internal-device-selector>/migrate
+   {
+     "destination_device_selector": "<new-device-selector>",
+     "features_mapping": {
+       "<source-feature-selector>": "<destination-feature-selector>"
+     }
+   }
+   ```
+
+   Both devices expose the same feature list in the same order, so the mapping
+   is one-to-one.
+
+4. Once every device is migrated, disable the built-in integration.
+
+Migrating deletes the source device: do it once you are satisfied with the new
+one.

@@ -1,0 +1,32 @@
+{
+  // Node executes the .ts files directly (native type stripping, Node >= 22.18):
+  // there is NO build step and no dist/. `tsc` is only ever run as a type
+  // checker (`npm run typecheck` -> `tsc --noEmit`).
+  //
+  // Consequence: only erasable syntax is allowed. No `enum`, no `namespace`,
+  // no parameter properties -- `erasableSyntaxOnly` makes the compiler enforce
+  // it, so a type-check failure catches what would otherwise be a runtime crash
+  // inside the container.
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": false,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["index.ts", "src/**/*.ts", "test/**/*.ts"]
+}
