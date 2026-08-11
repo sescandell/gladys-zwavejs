@@ -8,8 +8,9 @@
   // it, so a type-check failure catches what would otherwise be a runtime crash
   // inside the container.
   "compilerOptions": {
-    "target": "es2023",
-    "lib": ["es2023"],
+    // Node 24 (see package.json engines) is an ES2024 runtime.
+    "target": "es2024",
+    "lib": ["es2024"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "types": ["node"],

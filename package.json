@@ -19,12 +19,12 @@
     "mqtt": "5.15.2"
   },
   "devDependencies": {
-    "@types/node": "^22.18.0",
+    "@types/node": "^24.13.3",
     "oxfmt": "0.63.0",
     "oxlint": "1.78.0",
     "typescript": "7.0.2"
   },
   "engines": {
-    "node": ">=22.18"
+    "node": ">=24"
   }
 }

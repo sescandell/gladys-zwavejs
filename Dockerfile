@@ -8,8 +8,8 @@
 #   - multi-arch image (linux/amd64 + linux/arm64), see the CI workflow
 #
 # No build step: the sources are TypeScript and Node runs them directly through
-# its native type stripping (Node >= 22.18). `tsc` is a dev-only type checker,
-# never part of the image. What ships is what was written.
+# its native type stripping. `tsc` is a dev-only type checker, never part of
+# the image. What ships is what was written.
 # -----------------------------------------------------------------------------
 
 FROM node:24-alpine

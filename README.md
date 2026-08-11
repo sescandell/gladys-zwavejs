@@ -89,7 +89,8 @@ feature : ext:<selector>:<nodeId>:<endpoint>:<cc>:<property>[:<propertyKey>][:<f
 
 ## Development
 
-Node ≥ 22.18 runs the TypeScript sources directly through native type
+Node 24 (the Active LTS, and what the image ships) runs the TypeScript sources
+directly through native type
 stripping: there is **no build step** and no `dist/`. `tsc` is only ever a type
 checker, and the image ships the sources as written.
 
