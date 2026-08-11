@@ -12,6 +12,24 @@ import { applyQuirks, type MappedFeature } from './quirks.ts'
 const LOCATION_PARAM = 'location'
 
 /**
+ * A device name that is never empty.
+ *
+ * A Z-Wave node carries no name until someone types one in Z-Wave JS UI, and
+ * the Gladys host API rejects a nameless device — rejecting the WHOLE batch
+ * with it, so one unnamed node is enough to make the Discovery screen stay
+ * empty. The model description is the best readable fallback; the node id is
+ * the last resort, and always exists.
+ */
+function buildDeviceName(node: ZwaveNode): string {
+  for (const candidate of [node.name, node.productDescription, node.productLabel]) {
+    if (typeof candidate === 'string' && candidate.trim() !== '') {
+      return candidate.trim()
+    }
+  }
+  return `Z-Wave node ${node.id}`
+}
+
+/**
  * Turns Z-Wave JS UI nodes into Gladys devices, and Z-Wave value reports into
  * Gladys states. Both directions go through the same command class registry,
  * so a feature that is discovered is a feature whose reports are understood.
@@ -63,7 +81,7 @@ export class DeviceMapper {
     }
 
     return {
-      name: node.name || '',
+      name: buildDeviceName(node),
       external_id: this.externalId(deviceSuffix(node.id)),
       features: applyQuirks(mapped, node).map((entry) => entry.feature),
       params: [{ name: LOCATION_PARAM, value: node.loc ?? '' }],

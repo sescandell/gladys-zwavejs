@@ -63,6 +63,23 @@ interface GoldenDevice {
  * Deliberate departures from the internal service. Anything not listed here
  * must match it exactly.
  */
+/** Deliberate departures on the device itself. */
+const INTENTIONAL_DEVICE_DIVERGENCES: Array<{
+  reason: string
+  applies: (device: GoldenDevice) => boolean
+  override: (device: GoldenDevice) => Record<string, unknown>
+}> = [
+  {
+    reason:
+      'A Z-Wave node has no name until someone types one in Z-Wave JS UI, and the ' +
+      'reference output kept it empty. The Gladys host API rejects a nameless ' +
+      'device — and the whole batch with it — so the model description is used ' +
+      'as a fallback (node 1 is the controller stick).',
+    applies: (device) => device.name === '',
+    override: () => ({ name: 'Z‐Stick Gen5 USB Controller' }),
+  },
+]
+
 const INTENTIONAL_DIVERGENCES: Array<{
   reason: string
   applies: (feature: GoldenFeature) => boolean
@@ -89,8 +106,13 @@ const INTENTIONAL_DIVERGENCES: Array<{
 /** Bring a golden device to the shape an external integration publishes. */
 function normalizeGolden(device: GoldenDevice) {
   const rewrite = (id: string) => id.replace(/^zwavejs-ui:/, `ext:${SELECTOR}:`)
+  const deviceOverrides = INTENTIONAL_DEVICE_DIVERGENCES.filter((divergence) =>
+    divergence.applies(device),
+  ).reduce((accumulator, divergence) => Object.assign(accumulator, divergence.override(device)), {})
+
   return {
     name: device.name,
+    ...deviceOverrides,
     external_id: rewrite(device.external_id),
     params: device.params,
     features: device.features.map((feature) => {
@@ -135,6 +157,26 @@ test('every declared divergence is actually exercised by the fixture', () => {
     assert.ok(
       features.some((feature) => divergence.applies(feature)),
       `no fixture feature matches: ${divergence.reason}`,
+    )
+  }
+  for (const divergence of INTENTIONAL_DEVICE_DIVERGENCES) {
+    assert.ok(
+      golden.some((device) => divergence.applies(device)),
+      `no fixture device matches: ${divergence.reason}`,
+    )
+  }
+})
+
+test('every published device carries a name, whatever the node reports', () => {
+  // The host API rejects the whole batch over a single nameless device, so
+  // this is not cosmetic: one unnamed node blanks the Discovery screen.
+  const { result } = readFixture<{ result: ZwaveNode[] }>('exampleNodes.json')
+  const mapper = new DeviceMapper((suffix) => `ext:${SELECTOR}:${suffix}`)
+
+  for (const device of mapper.toDiscoveredDevices(result)) {
+    assert.ok(
+      typeof device.name === 'string' && device.name.length > 0,
+      `${device.external_id} has no name`,
     )
   }
 })

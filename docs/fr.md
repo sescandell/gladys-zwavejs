@@ -17,15 +17,31 @@ commandes Z-Wave.
 
 ## Configurer Z-Wave JS UI
 
-Dans **Settings → Home Assistant / MQTT** :
+L'intégration attend des topics MQTT nommés d'une façon précise. Ces réglages
+ne sont pas configurables côté Gladys : c'est Z-Wave JS UI qui doit s'aligner.
 
-- renseignez l'**URL du serveur MQTT**, ainsi que l'utilisateur et le mot de
-  passe si votre broker les exige ;
-- laissez **Prefix** à sa valeur par défaut (`zwave`), ou notez celle que vous
-  avez choisie ;
-- notez le **Name** de la passerelle dans **Settings → General** (par défaut :
-  `zwave-js-ui`). Le nom de la passerelle MQTT est ce nom préfixé par
-  `ZWAVE_GATEWAY-`, soit `ZWAVE_GATEWAY-zwave-js-ui` par défaut.
+Dans **Settings**, section **MQTT** :
+
+- **Name** : `zwave-js-ui` — sinon le préfixe de certains topics sera erroné ;
+- **Prefix** : `zwave` ;
+- **Host url** / **Port** : votre broker, ainsi que l'utilisateur et le mot de
+  passe s'il les exige.
+
+![Section MQTT](./images/zwavejs-ui-mqtt-configuration.jpg)
+
+Puis, section **Gateway**, exactement ces paramètres :
+
+- **Topic type** : `Named topics` ;
+- **Payload type** : `Entire Z-Wave value Object` ;
+- **Send Z-Wave events** : activé ;
+- **Include Node info** : activé ;
+- **Publish node details** : activé ;
+- **Ignore location** et **Ignore status updates** : désactivés.
+
+![Section Gateway](./images/zwavejs-ui-gateway-configuration.jpg)
+
+Sans le type de payload et les événements Z-Wave, aucun état d'appareil
+n'arrivera jusqu'à Gladys.
 
 ## Configurer l'intégration
 
@@ -34,9 +50,7 @@ Dans Gladys, ouvrez l'onglet **Configuration** de l'intégration :
 1. **URL du broker MQTT** — par exemple `mqtt://192.168.1.10:1883`.
 2. **Utilisateur / mot de passe MQTT** — à laisser vides pour un broker
    anonyme.
-3. Dans **Avancé**, ne modifiez le **Préfixe des topics** et le **Nom de la
-   passerelle** que si vous les avez changés dans Z-Wave JS UI.
-4. Enregistrez.
+3. Enregistrez.
 
 Le bouton **Tester la connexion** vérifie le lien : il indique le broker
 atteint et le nombre de nœuds Z-Wave visibles.
@@ -99,9 +113,10 @@ les fonctionnalités ci-dessus sont créées.
 
 **Rien n'apparaît dans la Découverte.** Regardez le statut dans l'onglet
 Configuration. S'il indique que le broker est injoignable, l'URL ou les
-identifiants sont erronés. S'il est connecté mais qu'aucun nœud n'apparaît, le
-**Nom de la passerelle** ou le **Préfixe des topics** ne correspond
-probablement pas à vos réglages Z-Wave JS UI.
+identifiants sont erronés. S'il est connecté mais qu'aucun nœud n'apparaît,
+reprenez la section « Configurer Z-Wave JS UI » : le champ **Name** doit valoir
+`zwave-js-ui` et **Prefix** `zwave`, faute de quoi l'intégration écoute des
+topics que personne n'alimente.
 
 **Un appareil ne se met plus à jour.** Z-Wave JS UI fait référence :
 vérifiez d'abord que le nœud y est bien vivant.

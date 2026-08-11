@@ -62,6 +62,10 @@ export interface ZwaveNode {
   loc?: string
   /** `<manufacturerId>-<productType>-<productId>`, used by the device quirks. */
   deviceId?: string
+  /** Readable model description, e.g. `Fibaro Door Window Sensor 2`. */
+  productDescription?: string
+  /** Model reference, e.g. `FGDW002`. */
+  productLabel?: string
   deviceClass?: ZwaveDeviceClass
   /** The broadcast/multicast pseudo-nodes, never exposed as Gladys devices. */
   virtual?: boolean

@@ -10,9 +10,7 @@
   "docker_image": "ghcr.io/sescandell/gladys-zwavejs:1.1.0",
   "gladys_version": ">=4.85.0",
   "cover_image": "https://raw.githubusercontent.com/Sescandell/gladys-zwavejs/master/cover.png",
-  "transports": [
-    "local"
-  ],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
@@ -43,6 +41,34 @@
       ]
     },
     {
+      "key": "zwavejs_ui_setup",
+      "type": "section",
+      "label": {
+        "en": "Configure Z-Wave JS UI",
+        "fr": "Configurer Z-Wave JS UI"
+      },
+      "description": {
+        "en": "In the Z-Wave JS UI settings, MQTT section: set \"Name\" to zwave-js-ui and leave \"Prefix\" at zwave — the integration expects those exact values to build its topics. Then, in the Gateway section, set \"Topic type\" to Named topics and \"Payload type\" to Entire Z-Wave value Object, and enable Send Z-Wave events, Include Node info and Publish node details. Without these, no device state ever reaches Gladys. The two screenshots below show the expected settings.",
+        "fr": "Dans les réglages de Z-Wave JS UI, section MQTT : mettez « Name » à zwave-js-ui et laissez « Prefix » à zwave — l'intégration attend exactement ces valeurs pour construire ses topics. Puis, dans la section Gateway, mettez « Topic type » à Named topics et « Payload type » à Entire Z-Wave value Object, et activez Send Z-Wave events, Include Node info et Publish node details. Sans cela, aucun état d'appareil n'arrivera jusqu'à Gladys. Les deux captures ci-dessous montrent les réglages attendus."
+      },
+      "links": [
+        {
+          "url": "https://raw.githubusercontent.com/Sescandell/gladys-zwavejs/master/docs/images/zwavejs-ui-mqtt-configuration.jpg",
+          "label": {
+            "en": "Screenshot: MQTT section",
+            "fr": "Capture : section MQTT"
+          }
+        },
+        {
+          "url": "https://raw.githubusercontent.com/Sescandell/gladys-zwavejs/master/docs/images/zwavejs-ui-gateway-configuration.jpg",
+          "label": {
+            "en": "Screenshot: Gateway section",
+            "fr": "Capture : section Gateway"
+          }
+        }
+      ]
+    },
+    {
       "key": "mqtt_url",
       "type": "string",
       "required": true,
@@ -55,8 +81,8 @@
         "fr": "Adresse du broker sur lequel Z-Wave JS UI publie, protocole inclus."
       },
       "placeholder": {
-        "en": "mqtt://192.168.1.10:1883",
-        "fr": "mqtt://192.168.1.10:1883"
+        "en": "mqtt://172.30.0.1:1884",
+        "fr": "mqtt://172.30.0.1:1884"
       }
     },
     {
@@ -77,44 +103,6 @@
       "label": {
         "en": "MQTT password",
         "fr": "Mot de passe MQTT"
-      }
-    },
-    {
-      "key": "advanced",
-      "type": "section",
-      "label": {
-        "en": "Advanced",
-        "fr": "Avancé"
-      },
-      "description": {
-        "en": "Only change these if you renamed the MQTT gateway in Z-Wave JS UI. The defaults match a standard installation.",
-        "fr": "À modifier uniquement si vous avez renommé la passerelle MQTT dans Z-Wave JS UI. Les valeurs par défaut correspondent à une installation standard."
-      }
-    },
-    {
-      "key": "topic_prefix",
-      "type": "string",
-      "default": "zwave",
-      "label": {
-        "en": "Topic prefix",
-        "fr": "Préfixe des topics"
-      },
-      "description": {
-        "en": "The \"Prefix\" field of the Z-Wave JS UI MQTT settings.",
-        "fr": "Le champ « Prefix » des réglages MQTT de Z-Wave JS UI."
-      }
-    },
-    {
-      "key": "gateway_name",
-      "type": "string",
-      "default": "ZWAVE_GATEWAY-zwave-js-ui",
-      "label": {
-        "en": "Gateway name",
-        "fr": "Nom de la passerelle"
-      },
-      "description": {
-        "en": "Derived from the \"Name\" field of the Z-Wave JS UI general settings, prefixed with ZWAVE_GATEWAY-.",
-        "fr": "Dérivé du champ « Name » des réglages généraux de Z-Wave JS UI, préfixé par ZWAVE_GATEWAY-."
       }
     }
   ],

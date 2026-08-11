@@ -8,8 +8,6 @@ export const DEFAULT_CONFIG = {
   mqtt_url: '',
   mqtt_username: '',
   mqtt_password: '',
-  topic_prefix: 'zwave',
-  gateway_name: 'ZWAVE_GATEWAY-zwave-js-ui',
 } as const
 
 /** Everything needed to open the MQTT connection — and nothing else. */
@@ -24,6 +22,17 @@ export interface BrokerSettings {
 export interface TopicSettings {
   readonly prefix: string
   readonly gateway: string
+}
+
+/**
+ * Where Z-Wave JS UI publishes. Fixed rather than configurable: the user is
+ * told to set the gateway "Name" to zwave-js-ui and keep "Prefix" at zwave —
+ * a handful of settings that must match on both sides, and are far easier to
+ * get right from a screenshot than from two free-text fields.
+ */
+export const TOPIC_SETTINGS: TopicSettings = {
+  prefix: 'zwave',
+  gateway: 'ZWAVE_GATEWAY-zwave-js-ui',
 }
 
 function readString(config: IntegrationConfig, key: keyof typeof DEFAULT_CONFIG): string {
@@ -68,18 +77,6 @@ export function resolveBroker(
     // A stable, unique client id: two Gladys instances on the same broker must
     // not fight over one session, and reconnecting must reuse the same id.
     clientId: `gladys-${selector}`,
-  }
-}
-
-/**
- * Resolve the topic coordinates. Configurable because Z-Wave JS UI lets the
- * user rename its MQTT gateway and topic prefix, and the defaults only cover
- * a stock installation.
- */
-export function resolveTopics(config: IntegrationConfig): TopicSettings {
-  return {
-    prefix: readString(config, 'topic_prefix').replace(/\/+$/, ''),
-    gateway: readString(config, 'gateway_name'),
   }
 }
 

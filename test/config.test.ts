@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { resolveBroker, resolveTopics, sameBroker } from '../src/config.ts'
+import { resolveBroker, sameBroker, TOPIC_SETTINGS } from '../src/config.ts'
 
 const SELECTOR = 'ext-dev-test'
 
@@ -12,10 +12,10 @@ test('an empty broker URL means "not configured", not a broken connection', () =
 
 test('surrounding whitespace is forgiven on the URL and the username', () => {
   const broker = resolveBroker(
-    { mqtt_url: '  mqtt://host:1883 ', mqtt_username: ' gladys ' },
+    { mqtt_url: '  mqtt://host:1884 ', mqtt_username: ' gladys ' },
     SELECTOR,
   )
-  assert.equal(broker?.url, 'mqtt://host:1883')
+  assert.equal(broker?.url, 'mqtt://host:1884')
   assert.equal(broker?.username, 'gladys')
 })
 
@@ -24,7 +24,7 @@ test('the password is passed through verbatim, spaces included', () => {
   // failure the user cannot diagnose: the field is a secret, so they cannot
   // even look at what was stored.
   const broker = resolveBroker(
-    { mqtt_url: 'mqtt://host:1883', mqtt_password: '  s3cr3t  ' },
+    { mqtt_url: 'mqtt://host:1884', mqtt_password: '  s3cr3t  ' },
     SELECTOR,
   )
   assert.equal(broker?.password, '  s3cr3t  ')
@@ -32,7 +32,7 @@ test('the password is passed through verbatim, spaces included', () => {
 
 test('empty credentials are omitted rather than sent as empty strings', () => {
   const broker = resolveBroker(
-    { mqtt_url: 'mqtt://host:1883', mqtt_username: '', mqtt_password: '' },
+    { mqtt_url: 'mqtt://host:1884', mqtt_username: '', mqtt_password: '' },
     SELECTOR,
   )
   assert.equal(broker?.username, undefined)
@@ -40,16 +40,16 @@ test('empty credentials are omitted rather than sent as empty strings', () => {
 })
 
 test('the client id is stable across reconnections', () => {
-  const first = resolveBroker({ mqtt_url: 'mqtt://host:1883' }, SELECTOR)
-  const second = resolveBroker({ mqtt_url: 'mqtt://host:1883' }, SELECTOR)
+  const first = resolveBroker({ mqtt_url: 'mqtt://host:1884' }, SELECTOR)
+  const second = resolveBroker({ mqtt_url: 'mqtt://host:1884' }, SELECTOR)
   assert.equal(first?.clientId, second?.clientId)
 })
 
 test('sameBroker only ignores what does not affect the connection', () => {
-  const base = resolveBroker({ mqtt_url: 'mqtt://host:1883', mqtt_password: 'a' }, SELECTOR)
-  const samePassword = resolveBroker({ mqtt_url: 'mqtt://host:1883', mqtt_password: 'a' }, SELECTOR)
+  const base = resolveBroker({ mqtt_url: 'mqtt://host:1884', mqtt_password: 'a' }, SELECTOR)
+  const samePassword = resolveBroker({ mqtt_url: 'mqtt://host:1884', mqtt_password: 'a' }, SELECTOR)
   const otherPassword = resolveBroker(
-    { mqtt_url: 'mqtt://host:1883', mqtt_password: 'b' },
+    { mqtt_url: 'mqtt://host:1884', mqtt_password: 'b' },
     SELECTOR,
   )
 
@@ -59,13 +59,11 @@ test('sameBroker only ignores what does not affect the connection', () => {
   assert.equal(sameBroker(undefined, undefined), true)
 })
 
-test('topic settings fall back to a stock Z-Wave JS UI installation', () => {
-  assert.deepEqual(resolveTopics({}), {
+test('the topic coordinates are the ones the user is told to set in Z-Wave JS UI', () => {
+  // Fixed, not configurable: the setup instructions and these values are one
+  // and the same contract, and they must not drift apart.
+  assert.deepEqual(TOPIC_SETTINGS, {
     prefix: 'zwave',
     gateway: 'ZWAVE_GATEWAY-zwave-js-ui',
   })
-})
-
-test('a trailing slash on the prefix does not produce a double separator', () => {
-  assert.equal(resolveTopics({ topic_prefix: 'home/zwave/' }).prefix, 'home/zwave')
 })

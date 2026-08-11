@@ -7,8 +7,9 @@ import type {
   MultiLanguageMessage,
 } from '@gladysassistant/integration-sdk'
 
-import { resolveBroker, resolveTopics, sameBroker, type BrokerSettings } from '../config.ts'
+import { resolveBroker, sameBroker, TOPIC_SETTINGS, type BrokerSettings } from '../config.ts'
 import { DeviceMapper } from '../mapping/DeviceMapper.ts'
+import { countEn, countFr } from '../plural.ts'
 import type {
   GetNodesResponse,
   NodeEvent,
@@ -60,12 +61,11 @@ export class ZwaveIntegration {
   private publishingDiscovery = false
   private discoveryPending = false
   private broker: BrokerSettings | undefined
-  private topics: Topics
+  private readonly topics: Topics = buildTopics(TOPIC_SETTINGS)
 
   constructor(gladys: GladysIntegration, logger: Logger) {
     this.gladys = gladys
     this.logger = logger
-    this.topics = buildTopics(resolveTopics({}))
 
     const externalId = (suffix: string) => gladys.externalId(suffix)
     this.mapper = new DeviceMapper(externalId)
@@ -125,11 +125,7 @@ export class ZwaveIntegration {
     config: IntegrationConfig,
     { force }: { force: boolean },
   ): Promise<void> {
-    const topics = buildTopics(resolveTopics(config))
     const broker = resolveBroker(config, this.gladys.selector)
-    const topicsChanged = JSON.stringify(topics) !== JSON.stringify(this.topics)
-
-    this.topics = topics
 
     if (!broker) {
       this.broker = undefined
@@ -138,7 +134,7 @@ export class ZwaveIntegration {
       return
     }
 
-    if (!force && !topicsChanged && sameBroker(broker, this.broker) && this.client.connected) {
+    if (!force && sameBroker(broker, this.broker) && this.client.connected) {
       return
     }
 
@@ -146,7 +142,7 @@ export class ZwaveIntegration {
     try {
       // Always reopens: `open` closes the previous client first, so repeated
       // saves cannot pile up connections.
-      await this.client.open(broker, topics)
+      await this.client.open(broker, this.topics)
     } catch (error) {
       // `mqtt.connect` throws synchronously on a malformed URL (a missing
       // `mqtt://` scheme, typically). The SDK swallows handler errors into a
@@ -155,8 +151,8 @@ export class ZwaveIntegration {
       const reason = error instanceof Error ? error.message : String(error)
       this.logger.error(`Cannot open the MQTT connection to ${broker.url}: ${reason}`)
       await this.setStatus(false, {
-        en: `Invalid MQTT broker settings (${reason}). Check the URL includes a protocol, e.g. mqtt://host:1883.`,
-        fr: `Paramètres du broker MQTT invalides (${reason}). Vérifiez que l'URL comporte un protocole, par exemple mqtt://hote:1883.`,
+        en: `Invalid MQTT broker settings (${reason}). Check the URL includes a protocol, e.g. mqtt://host:1884.`,
+        fr: `Paramètres du broker MQTT invalides (${reason}). Vérifiez que l'URL comporte un protocole, par exemple mqtt://hote:1884.`,
       })
     }
   }
@@ -287,8 +283,8 @@ export class ZwaveIntegration {
     }
     const count = this.registry.size
     return {
-      en: `Connected to ${this.broker.url}. ${count} Z-Wave node(s) known.`,
-      fr: `Connecté à ${this.broker.url}. ${count} nœud(s) Z-Wave connu(s).`,
+      en: `Connected to ${this.broker.url}. ${countEn(count, 'Z-Wave node', 'Z-Wave nodes')} known.`,
+      fr: `Connecté à ${this.broker.url}. ${countFr(count, 'nœud Z-Wave connu', 'nœuds Z-Wave connus')}.`,
     }
   }
 
@@ -329,7 +325,9 @@ export class ZwaveIntegration {
         try {
           // oxlint-disable-next-line no-await-in-loop
           await this.gladys.publishDiscoveredDevices(devices)
-          this.logger.info(`Published ${devices.length} discovered device(s)`)
+          this.logger.info(
+            `Published ${countEn(devices.length, 'discovered device', 'discovered devices')}`,
+          )
         } catch (error) {
           this.logger.error('Failed to publish the discovered devices', error)
         }

@@ -16,14 +16,31 @@ devices, and Gladys commands into Z-Wave commands.
 
 ## Setting up Z-Wave JS UI
 
-In **Settings → Home Assistant / MQTT**:
+The integration expects MQTT topics named in a specific way. These are not
+configurable on the Gladys side: Z-Wave JS UI is the one that must match.
 
-- fill in the **MQTT server URL**, and the username/password if your broker
-  requires them;
-- keep **Prefix** at its default (`zwave`), or note the value you chose;
-- note the **Name** of the gateway in **Settings → General** (default:
-  `zwave-js-ui`). The MQTT gateway name is that name prefixed with
-  `ZWAVE_GATEWAY-`, so the default is `ZWAVE_GATEWAY-zwave-js-ui`.
+In **Settings**, **MQTT** section:
+
+- **Name**: `zwave-js-ui` — otherwise the prefix of some topics will be wrong;
+- **Prefix**: `zwave`;
+- **Host url** / **Port**: your broker, plus the username and password if it
+  requires them.
+
+![MQTT section](./images/zwavejs-ui-mqtt-configuration.jpg)
+
+Then, in the **Gateway** section, exactly these settings:
+
+- **Topic type**: `Named topics`;
+- **Payload type**: `Entire Z-Wave value Object`;
+- **Send Z-Wave events**: enabled;
+- **Include Node info**: enabled;
+- **Publish node details**: enabled;
+- **Ignore location** and **Ignore status updates**: disabled.
+
+![Gateway section](./images/zwavejs-ui-gateway-configuration.jpg)
+
+Without the payload type and the Z-Wave events, no device state ever reaches
+Gladys.
 
 ## Configuring the integration
 
@@ -31,9 +48,7 @@ In Gladys, open the integration's **Configuration** tab:
 
 1. **MQTT broker URL** — for example `mqtt://192.168.1.10:1883`.
 2. **MQTT username / password** — leave empty for an anonymous broker.
-3. Under **Advanced**, only change **Topic prefix** and **Gateway name** if you
-   changed them in Z-Wave JS UI.
-4. Save.
+3. Save.
 
 Use **Test the connection** to check the link: it reports the broker it reached
 and how many Z-Wave nodes it can see.
@@ -92,8 +107,9 @@ above are created.
 
 **Nothing appears in Discovery.** Check the Configuration tab status. If it
 says the broker is unreachable, the URL or the credentials are wrong. If it is
-connected but no node shows up, the **Gateway name** or **Topic prefix**
-probably does not match your Z-Wave JS UI settings.
+connected but no node shows up, go back over "Setting up Z-Wave JS UI": **Name**
+must be `zwave-js-ui` and **Prefix** `zwave`, or the integration listens on
+topics nobody publishes to.
 
 **A device stopped updating.** Z-Wave JS UI is the source of truth: check the
 node is alive there first.
