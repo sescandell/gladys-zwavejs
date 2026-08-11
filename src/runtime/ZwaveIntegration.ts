@@ -61,6 +61,9 @@ export class ZwaveIntegration {
   private publishingDiscovery = false
   private discoveryPending = false
   private broker: BrokerSettings | undefined
+  /** Why the last connection attempt failed, surfaced by the manifest action. */
+  private brokerError: MultiLanguageMessage | undefined
+  private lifecycle: Promise<void> = Promise.resolve()
   private readonly topics: Topics = buildTopics(TOPIC_SETTINGS)
 
   constructor(gladys: GladysIntegration, logger: Logger) {
@@ -99,11 +102,30 @@ export class ZwaveIntegration {
 
   /** Run on every (re)connection to Gladys — never assume anything survived. */
   async start(): Promise<void> {
-    const config = await this.gladys.getConfig()
-    this.refreshKnownFeatures(this.gladys.devices)
-    // A reconnection may have hidden state changes: publish freely again.
-    this.states.reset()
-    await this.applyConfig(config, { force: true })
+    return this.serialize(async () => {
+      const config = await this.gladys.getConfig()
+      this.refreshKnownFeatures(this.gladys.devices)
+      // A reconnection may have hidden state changes: publish freely again,
+      // and revive the publisher that the matching stop() put to sleep.
+      this.states.reset()
+      await this.applyConfig(config, { force: true })
+    })
+  }
+
+  /**
+   * Serializes start and stop. Both are async and both are fired by the SDK
+   * lifecycle events, which are not ordered against each other: a reconnection
+   * arriving while a stop is draining used to let start open the MQTT link and
+   * stop close it right after, leaving the integration connected to Gladys but
+   * deaf to the Z-Wave network.
+   */
+  private serialize(operation: () => Promise<void>): Promise<void> {
+    const next = this.lifecycle.then(operation, operation)
+    this.lifecycle = next.then(
+      () => undefined,
+      () => undefined,
+    )
+    return next
   }
 
   /** Config saved in the UI: reopen the link only if it actually changed. */
@@ -112,13 +134,15 @@ export class ZwaveIntegration {
   }
 
   async stop(): Promise<void> {
-    if (this.discoveryTimer) {
-      clearTimeout(this.discoveryTimer)
-      this.discoveryTimer = undefined
-    }
-    // Drains what is still publishable before the socket goes away.
-    await this.states.stop()
-    await this.client.close()
+    return this.serialize(async () => {
+      if (this.discoveryTimer) {
+        clearTimeout(this.discoveryTimer)
+        this.discoveryTimer = undefined
+      }
+      // Drains what is still publishable before the socket goes away.
+      await this.states.stop()
+      await this.client.close()
+    })
   }
 
   private async applyConfig(
@@ -139,6 +163,7 @@ export class ZwaveIntegration {
     }
 
     this.broker = broker
+    this.brokerError = undefined
     try {
       // Always reopens: `open` closes the previous client first, so repeated
       // saves cannot pile up connections.
@@ -150,10 +175,11 @@ export class ZwaveIntegration {
       // nothing: no status, no log, no device.
       const reason = error instanceof Error ? error.message : String(error)
       this.logger.error(`Cannot open the MQTT connection to ${broker.url}: ${reason}`)
-      await this.setStatus(false, {
-        en: `Invalid MQTT broker settings (${reason}). Check the URL includes a protocol, e.g. mqtt://host:1884.`,
-        fr: `Paramètres du broker MQTT invalides (${reason}). Vérifiez que l'URL comporte un protocole, par exemple mqtt://hote:1884.`,
-      })
+      this.brokerError = {
+        en: `Invalid MQTT broker settings (${reason}). Check the URL includes a protocol, e.g. mqtt://host:1883.`,
+        fr: `Paramètres du broker MQTT invalides (${reason}). Vérifiez que l'URL comporte un protocole, par exemple mqtt://hote:1883.`,
+      }
+      await this.setStatus(false, this.brokerError)
     }
   }
 
@@ -272,6 +298,10 @@ export class ZwaveIntegration {
 
   /** Manifest action: report what the integration currently sees. */
   testConnection(): MultiLanguageMessage {
+    if (this.brokerError) {
+      // Say the same thing as the status banner this action is meant to explain.
+      return this.brokerError
+    }
     if (!this.broker) {
       return NOT_CONFIGURED
     }
@@ -354,9 +384,16 @@ export class ZwaveIntegration {
   }
 
   private setDeviceFeatures(device: Device): void {
+    // `features` is optional in the payload: a rename or a room change may
+    // carry none. Replacing with an empty set would silence every state of
+    // that device until the next reconnection — an absent list means "not
+    // told", not "no features".
+    if (!device.features) {
+      return
+    }
     this.featuresByDevice.set(
       device.external_id,
-      new Set((device.features ?? []).map((feature) => feature.external_id)),
+      new Set(device.features.map((feature) => feature.external_id)),
     )
     this.rebuildKnownFeatures()
   }

@@ -16,6 +16,15 @@ const BUDGET_RETRY_DELAY_MS = 1000
 /** Above this, the queue is considered stuck and gets degraded (see `degrade`). */
 const QUEUE_HIGH_WATER_MARK = MAX_STATES_PER_MINUTE
 
+/**
+ * Absolute ceiling. `degrade` spares event states, which is right — but it
+ * means a device stuck repeating an event faster than the budget allows could
+ * otherwise grow the queue until the container runs out of memory. Past this
+ * point the oldest entries go, newest kept: a state nobody could send for
+ * minutes is worthless anyway.
+ */
+const QUEUE_HARD_LIMIT = 10 * MAX_STATES_PER_MINUTE
+
 /** Warn at most once per minute, so a saturated network does not flood the logs. */
 const WARN_INTERVAL_MS = 60_000
 
@@ -75,7 +84,9 @@ export class StatePublisher {
 
   private timer: NodeJS.Timeout | undefined
   private flushing = false
-  private lastWarnAt = 0
+  private stopped = false
+  private inFlight: Promise<void> | undefined
+  private lastWarnAt = new Map<string, number>()
 
   constructor(options: StatePublisherOptions) {
     this.options = options
@@ -123,11 +134,23 @@ export class StatePublisher {
     }
   }
 
-  /** Send everything that fits in the budget, now. */
+  /**
+   * Send everything that fits in the budget, now. Concurrent callers join the
+   * flush already running rather than returning immediately — a caller that
+   * awaits this needs the drain to be over when it resolves.
+   */
   async flush(): Promise<void> {
-    if (this.flushing) {
-      return
+    if (this.inFlight) {
+      return this.inFlight
     }
+    const run = this.drain()
+    this.inFlight = run.finally(() => {
+      this.inFlight = undefined
+    })
+    return this.inFlight
+  }
+
+  private async drain(): Promise<void> {
     this.clearTimer()
     this.flushing = true
     // Scheduling happens in the `finally`: `schedule()` refuses to arm a timer
@@ -182,6 +205,9 @@ export class StatePublisher {
    * that was just accepted would die with the process.
    */
   async stop(): Promise<void> {
+    // Set FIRST: a flush already in flight will reach its `finally` and ask for
+    // a retry, which must not re-arm a timer on a publisher that is going away.
+    this.stopped = true
     this.clearTimer()
     await this.flush().catch(() => {
       // Best effort: we are on our way out.
@@ -189,13 +215,18 @@ export class StatePublisher {
     this.clearTimer()
   }
 
-  /** Forget the deduplication memory — after a reconnection, republish freely. */
+  /**
+   * Forget the deduplication memory — after a reconnection, republish freely.
+   * Also revives a stopped publisher: `stop()` runs on every Gladys
+   * disconnection, and `start()` calls this on the way back.
+   */
   reset(): void {
     this.lastPublished.clear()
+    this.stopped = false
   }
 
   private schedule(delay: number = FLUSH_DELAY_MS): void {
-    if (this.timer || this.flushing) {
+    if (this.timer || this.flushing || this.stopped) {
       return
     }
     this.timer = setTimeout(() => {
@@ -287,18 +318,44 @@ export class StatePublisher {
     this.reindex()
 
     this.warn(
+      'degraded',
       `State budget exhausted (${MAX_STATES_PER_MINUTE}/min): dropped ${before - this.queue.length} ` +
         `intermediate states, kept the first and last of each feature. ` +
         `Your Z-Wave network is reporting faster than Gladys accepts.`,
     )
+
+    this.enforceHardLimit()
   }
 
-  private warn(message: string): void {
-    const now = this.now()
-    if (now - this.lastWarnAt < WARN_INTERVAL_MS) {
+  /**
+   * The last line of defence, once thinning has done what it could. Only an
+   * event flood can get here — everything else has already collapsed to two
+   * entries per feature — and events must not grow the queue forever.
+   */
+  private enforceHardLimit(): void {
+    if (this.queue.length <= QUEUE_HARD_LIMIT) {
       return
     }
-    this.lastWarnAt = now
+    const dropped = this.queue.length - QUEUE_HARD_LIMIT
+    this.queue = this.queue.slice(dropped)
+    this.reindex()
+    this.warn(
+      'hard-limit',
+      `State queue over ${QUEUE_HARD_LIMIT} entries: dropped the ${dropped} oldest. ` +
+        `A device is reporting events faster than Gladys can accept them.`,
+    )
+  }
+
+  /**
+   * Throttled per `kind`: the degradation warning must not swallow the rarer,
+   * more serious hard-limit one just because it fired a few milliseconds earlier.
+   */
+  private warn(kind: string, message: string): void {
+    const now = this.now()
+    if (now - (this.lastWarnAt.get(kind) ?? -WARN_INTERVAL_MS) < WARN_INTERVAL_MS) {
+      return
+    }
+    this.lastWarnAt.set(kind, now)
     this.options.logger.warn(message)
   }
 }

@@ -39,7 +39,7 @@ const temperature = (category: string, type: string): FeatureSpec => ({
   min: 5,
   max: 40,
   read_only: false,
-  has_feedback: true,
+  has_feedback: false,
   keep_history: true,
 })
 

@@ -44,7 +44,7 @@ export const thermostatMode: CommandClassModule = {
               // reliably advertise the modes a device supports.
               max: THERMOSTAT_MODE.AUTO,
               read_only: false,
-              has_feedback: true,
+              has_feedback: false,
               keep_history: true,
             },
           },

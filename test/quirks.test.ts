@@ -74,3 +74,37 @@ test('another manufacturer keeps everything it exposes', () => {
 
   assert.deepEqual(names(applyQuirks(features, node({ deviceId: '1-2-3' }))), ['any', 'alarm'])
 })
+
+test('the root endpoint mirroring a dimmer loses its duplicate on/off', () => {
+  // The common multi-endpoint layout: endpoint 0 aggregates endpoint 1. Its
+  // Binary Switch is the same relay seen twice, not a second one.
+  const result = applyQuirks(
+    [entry('dimmer', MULTILEVEL_SWITCH, 1), entry('root-relay', BINARY_SWITCH, 0)],
+    node(),
+  )
+
+  assert.deepEqual(names(result), ['dimmer'])
+})
+
+test('a dimmer on the root endpoint still hides its own binary switch', () => {
+  const result = applyQuirks(
+    [entry('dimmer', MULTILEVEL_SWITCH, 0), entry('relay', BINARY_SWITCH, 0)],
+    node(),
+  )
+
+  assert.deepEqual(names(result), ['dimmer'])
+})
+
+test('a relay on a real endpoint survives next to a dimmer on another', () => {
+  // Two real endpoints, neither of them the root: nothing is a duplicate.
+  const result = applyQuirks(
+    [
+      entry('dimmer', MULTILEVEL_SWITCH, 1),
+      entry('relay', BINARY_SWITCH, 2),
+      entry('root-relay', BINARY_SWITCH, 0),
+    ],
+    node(),
+  )
+
+  assert.deepEqual(names(result), ['dimmer', 'relay'])
+})

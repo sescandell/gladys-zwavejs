@@ -264,3 +264,69 @@ test('stop() drains what is still queued instead of dropping it', async () => {
 
   assert.deepEqual(publisher.states, [{ device_feature_external_id: SHUTTER, state: 30 }])
 })
+
+test('a concurrent flush joins the one in flight instead of returning early', async () => {
+  // stop() relies on this: awaiting flush() must mean the drain is over, not
+  // "someone else is draining, good luck".
+  let release: (() => void) | undefined
+  const sent: number[] = []
+  const states = new StatePublisher({
+    logger: createFakeLogger(),
+    publish: async (batch) => {
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+      sent.push(...batch.map((entry) => entry.state as number))
+    },
+    knownFeatures: () => new Set([SHUTTER]),
+  })
+
+  states.push([state(SHUTTER, 30)])
+  const first = states.flush()
+  const second = states.flush()
+  release?.()
+  await Promise.all([first, second])
+
+  assert.deepEqual(sent, [30], 'the batch was sent once, and both callers waited for it')
+})
+
+test('a stopped publisher ignores what arrives after it', async () => {
+  // stop() runs on a Gladys disconnection, and MQTT messages keep landing for
+  // a moment afterwards. Without the stopped flag they would arm a timer and
+  // publish into a closed connection.
+  const { publisher, states } = setup([SHUTTER])
+  await states.stop()
+
+  states.push([state(SHUTTER, 30)])
+  await setTimeout(400)
+
+  assert.equal(publisher.states.length, 0, 'nothing was published after stop()')
+})
+
+test('a revived publisher schedules again', async () => {
+  const { publisher, states } = setup([SHUTTER])
+  await states.stop()
+
+  states.reset()
+  states.push([state(SHUTTER, 30)])
+  await setTimeout(400)
+
+  assert.deepEqual(publisher.states, [{ device_feature_external_id: SHUTTER, state: 30 }])
+})
+
+test('an event flood is capped instead of growing the queue without bound', async () => {
+  const filler = Array.from({ length: 300 }, (_, index) => `ext:test:1:0:battery:level:${index}`)
+  const { logger, publisher, states } = setup([...filler, BUTTON])
+
+  states.push(filler.map((feature, index) => state(feature, index)))
+  await states.flush()
+  assert.equal(publisher.states.length, 300, 'budget spent')
+
+  // Events are exempt from thinning, so only the hard limit can bound this.
+  for (let batch = 0; batch < 40; batch += 1) {
+    states.push(Array.from({ length: 100 }, () => state(BUTTON, 1, { event: true })))
+  }
+  await states.flush()
+
+  assert.match(logger.warnings.join('\n'), /State queue over/)
+})

@@ -3,8 +3,9 @@ import type { TopicSettings } from '../config.ts'
 /**
  * The Z-Wave JS UI topic tree.
  *
- * Both the prefix and the gateway name are configurable, so nothing here is a
- * constant: every topic is derived from what the user declared.
+ * Every topic derives from the prefix and the gateway name, which are fixed
+ * (see TOPIC_SETTINGS) and mirrored by the setup instructions the user follows
+ * in Z-Wave JS UI.
  */
 export interface Topics {
   /** Response carrying the full node list. */

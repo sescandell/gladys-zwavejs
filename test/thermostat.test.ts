@@ -81,7 +81,9 @@ test('the thermostat mode is discovered as a writable thermostat mode feature', 
   assert.equal(mode.category, 'thermostat')
   assert.equal(mode.type, 'mode')
   assert.equal(mode.read_only, false)
-  assert.equal(mode.has_feedback, true)
+  // Same convention as every other writable feature here: the core saves the
+  // commanded value so the UI reacts, and the device's own report corrects it.
+  assert.equal(mode.has_feedback, false)
   assert.deepEqual([mode.min, mode.max], [0, 3])
 })
 

@@ -16,6 +16,9 @@ const COMMAND_CLASS = {
   ALARM_SENSOR: 156,
 } as const
 
+/** The root endpoint, which on a multi-endpoint device mirrors the real ones. */
+const ROOT_ENDPOINT = 0
+
 /** Devices needing a specific fix, by `<manufacturerId>-<productType>-<productId>`. */
 const PRODUCT_ID = {
   FIBARO_FGMS001: '271-4097-2048',
@@ -39,14 +42,22 @@ export function applyQuirks<T>(
   // synchronized with the position — we drop the explicit one rather than
   // show the user two on/off controls that behave differently.
   //
-  // Scoped to the endpoint: on a device mixing a dimmer on one endpoint and a
-  // plain relay on another, the relay has no dimmer to be replaced by and
-  // would otherwise lose its only control.
+  // Two shapes to tell apart, and only one of them must be filtered:
+  //  - the SAME endpoint carries both classes: the Binary Switch duplicates
+  //    the dimmer, drop it;
+  //  - the root endpoint 0 mirrors the real endpoints, as most multi-endpoint
+  //    devices do: its Binary Switch is a duplicate too, drop it;
+  //  - two DIFFERENT real endpoints, a dimmer on one and a plain relay on the
+  //    other: the relay has no dimmer to be replaced by, keep it or that half
+  //    of the device loses its only control.
   const dimmerEndpoints = new Set(
     result.filter((f) => f.commandClass === COMMAND_CLASS.MULTILEVEL_SWITCH).map((f) => f.endpoint),
   )
+  const rootMirrorsADimmer = dimmerEndpoints.size > 0 && !dimmerEndpoints.has(ROOT_ENDPOINT)
   result = result.filter(
-    (f) => f.commandClass !== COMMAND_CLASS.BINARY_SWITCH || !dimmerEndpoints.has(f.endpoint),
+    (f) =>
+      f.commandClass !== COMMAND_CLASS.BINARY_SWITCH ||
+      !(dimmerEndpoints.has(f.endpoint) || (rootMirrorsADimmer && f.endpoint === ROOT_ENDPOINT)),
   )
 
   // Fibaro Motion Sensor FGMS-001: its Alarm Sensor duplicates the motion
