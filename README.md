@@ -66,8 +66,10 @@ network reports faster than that, so `StatePublisher` puts four stages between
 the network and the host API:
 
 1. states for devices the user has not created are dropped;
-2. a value identical to the last published one is dropped, unless the feature
-   is an **event** (a button press counts every time, even repeated);
+2. a value identical to the last published one is dropped — but only for a
+   few minutes, so a steady value keeps producing history and the device does
+   not look dead. Event features are never deduplicated (a button press counts
+   every time, even repeated);
 3. states are batched, and **coalesced only where coalescing is wanted**
    (`sampled`: temperatures, meters, battery levels). A shutter or a dimmer
    keeps every intermediate position — watching the position progress is how

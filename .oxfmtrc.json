@@ -7,5 +7,5 @@
   "trailingComma": "all",
   "arrowParens": "always",
   "endOfLine": "lf",
-  "ignorePatterns": ["test/fixtures/**"]
+  "ignorePatterns": ["test/fixtures/**", "gladys-assistant-integration.json"]
 }

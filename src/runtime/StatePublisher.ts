@@ -28,6 +28,21 @@ const QUEUE_HARD_LIMIT = 10 * MAX_STATES_PER_MINUTE
 /** Warn at most once per minute, so a saturated network does not flood the logs. */
 const WARN_INTERVAL_MS = 60_000
 
+/**
+ * How long an identical value stays suppressed.
+ *
+ * Deduplication must not be permanent. The Gladys core stores every state it
+ * receives, without comparing it to the previous one, so suppressing repeats
+ * forever leaves holes: a plug idle at 0 W for six hours would record a single
+ * point, and its `last_value_changed` would freeze — making a healthy device
+ * that reports a steady value indistinguishable from a dead one.
+ *
+ * Past this delay the same value goes through again. The cost is bounded: one
+ * state per feature per interval, i.e. a couple of states a minute even on a
+ * large network, against a budget of 300.
+ */
+const DEDUP_TTL_MS = 5 * 60_000
+
 export interface StatePublisherOptions {
   readonly logger: Logger
   /** Sends one batch; must reject on failure so the batch can be requeued. */
@@ -60,9 +75,11 @@ interface QueuedState {
  *     created is ignored by the core anyway — but only AFTER being counted
  *     against the budget. On a network where 8 of 40 nodes are in Gladys, this
  *     alone removes most of the traffic.
- *  2. **Deduplicate.** Same feature, same value as last published: drop.
- *     Except for event features (a button pressed twice sends the same value
- *     twice, and the repetition IS the information).
+ *  2. **Deduplicate, but not forever.** Same feature, same value as last
+ *     published: drop — until DEDUP_TTL_MS has passed, after which it goes
+ *     through again so the history stays continuous and the device keeps
+ *     looking alive. Event features are never deduplicated (a button pressed
+ *     twice sends the same value twice, and the repetition IS the information).
  *  3. **Batch, and coalesce only where coalescing is wanted.** Grouping loses
  *     nothing. Coalescing does — so it is opt-in, per feature (`sampled`). A
  *     shutter reporting 30 → 55 → 80 → 100 keeps all four: watching the
@@ -79,7 +96,8 @@ export class StatePublisher {
   private queue: QueuedState[] = []
   private sampledIndex = new Map<string, number>()
 
-  private lastPublished = new Map<string, number>()
+  /** Last accepted value per feature, and when it was accepted. */
+  private lastPublished = new Map<string, { state: number; at: number }>()
   private sentAt: number[] = []
 
   private timer: NodeJS.Timeout | undefined
@@ -96,18 +114,24 @@ export class StatePublisher {
   /** Queue states; they leave in the next batch. */
   push(states: readonly PendingState[]): void {
     const known = this.options.knownFeatures()
+    const now = this.now()
     let queued = false
 
     for (const pending of states) {
       if (!known.has(pending.featureExternalId)) {
         continue
       }
-      if (!pending.event && this.lastPublished.get(pending.featureExternalId) === pending.state) {
+      const previous = this.lastPublished.get(pending.featureExternalId)
+      const repeated =
+        previous !== undefined &&
+        previous.state === pending.state &&
+        now - previous.at < DEDUP_TTL_MS
+      if (!pending.event && repeated) {
         continue
       }
       // Reserve the value now: two identical reports inside one window must
       // not both go through.
-      this.lastPublished.set(pending.featureExternalId, pending.state)
+      this.lastPublished.set(pending.featureExternalId, { state: pending.state, at: now })
 
       const existingIndex = pending.sampled
         ? this.sampledIndex.get(pending.featureExternalId)

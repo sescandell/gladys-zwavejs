@@ -330,3 +330,42 @@ test('an event flood is capped instead of growing the queue without bound', asyn
 
   assert.match(logger.warnings.join('\n'), /State queue over/)
 })
+
+test('a value unchanged for a long while is published again', async () => {
+  // A plug idle at 0 W must keep producing history points, and keep its
+  // last_value_changed moving — a steady device must not look like a dead one.
+  const { publisher, clock, states } = setup([TEMPERATURE])
+
+  states.push([state(TEMPERATURE, 0, { sampled: true })])
+  await states.flush()
+
+  clock.advance(60_000)
+  states.push([state(TEMPERATURE, 0, { sampled: true })])
+  await states.flush()
+  assert.equal(publisher.states.length, 1, 'still suppressed a minute later')
+
+  clock.advance(5 * 60_000)
+  states.push([state(TEMPERATURE, 0, { sampled: true })])
+  await states.flush()
+
+  assert.equal(publisher.states.length, 2, 'published again past the deduplication window')
+})
+
+test('the deduplication window restarts from the last accepted value', async () => {
+  const { publisher, clock, states } = setup([TEMPERATURE])
+
+  states.push([state(TEMPERATURE, 21, { sampled: true })])
+  await states.flush()
+
+  // A different value goes through immediately and resets the clock.
+  clock.advance(4 * 60_000)
+  states.push([state(TEMPERATURE, 22, { sampled: true })])
+  await states.flush()
+  assert.equal(publisher.states.length, 2)
+
+  clock.advance(4 * 60_000)
+  states.push([state(TEMPERATURE, 22, { sampled: true })])
+  await states.flush()
+
+  assert.equal(publisher.states.length, 2, 'the window runs from the 22, not from the 21')
+})
