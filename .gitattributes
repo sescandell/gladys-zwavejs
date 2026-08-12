@@ -1,0 +1,15 @@
+# Line endings are LF everywhere: in the repository AND in the working tree.
+#
+# Without this, a Windows checkout with core.autocrlf=true rewrites every file
+# to CRLF, and git then reports files as modified when nothing in them changed.
+# `eol=lf` overrides that setting for this repository, so the sources match what
+# the Linux container runs and what oxfmt writes (endOfLine: "lf").
+* text=auto eol=lf
+
+# Never touch binaries. `text=auto` already detects them, but being explicit
+# means a corrupted image can never be blamed on line-ending conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
