@@ -5,12 +5,12 @@ import type { CommandClassModule } from './types.ts'
 
 const ZWAVE_MOTION = {
   IDLE: 0,
-  MOTION_DETECTION: 8
+  MOTION_DETECTION: 8,
 }
 
 const ZWAVE_OPENING = {
   OPENED: 22,
-  CLOSED: 23
+  CLOSED: 23,
 }
 
 /** Notification (0x71) — door/window state + motion today, the notification catalog is huge. */
@@ -66,7 +66,7 @@ export const notification: CommandClassModule = {
                 has_feedback: true,
                 keep_history: true,
               },
-            }
+            },
           ],
           fromZwave: [
             {
@@ -81,8 +81,8 @@ export const notification: CommandClassModule = {
               },
             },
           ],
-        }
-      }
+        },
+      },
     },
   },
 }

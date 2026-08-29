@@ -30,6 +30,13 @@ const NODE_VALUE_UPDATED_EVENT = 'node_value_updated'
 /** Coalescing window for discovery publications (node event bursts). */
 const DISCOVERY_DEBOUNCE_MS = 500
 
+/**
+ * Coalescing window before asking for a full `getNodes` again. Long enough to
+ * let a zwave-js-ui restart finish announcing its nodes: it re-announces them
+ * one by one, and each announcement would otherwise ask for its own dump.
+ */
+const RESYNC_DEBOUNCE_MS = 2000
+
 const NOT_CONFIGURED: MultiLanguageMessage = {
   en: 'MQTT broker not configured. Fill in the connection settings below.',
   fr: 'Broker MQTT non configuré. Renseignez les paramètres de connexion ci-dessous.',
@@ -58,6 +65,9 @@ export class ZwaveIntegration {
   private featuresByDevice = new Map<string, Set<string>>()
   private knownFeatures = new Set<string>()
   private discoveryTimer: NodeJS.Timeout | undefined
+  private resyncTimer: NodeJS.Timeout | undefined
+  /** The network is logged once per start, not on every resynchronization. */
+  private networkLogged = false
   private publishingDiscovery = false
   private discoveryPending = false
   private broker: BrokerSettings | undefined
@@ -105,6 +115,7 @@ export class ZwaveIntegration {
     return this.serialize(async () => {
       const config = await this.gladys.getConfig()
       this.refreshKnownFeatures(this.gladys.devices)
+      this.networkLogged = false
       // A reconnection may have hidden state changes: publish freely again,
       // and revive the publisher that the matching stop() put to sleep.
       this.states.reset()
@@ -138,6 +149,10 @@ export class ZwaveIntegration {
       if (this.discoveryTimer) {
         clearTimeout(this.discoveryTimer)
         this.discoveryTimer = undefined
+      }
+      if (this.resyncTimer) {
+        clearTimeout(this.resyncTimer)
+        this.resyncTimer = undefined
       }
       // Drains what is still publishable before the socket goes away.
       await this.states.stop()
@@ -229,8 +244,54 @@ export class ZwaveIntegration {
       this.logger.warn('Received a getNodes answer without a node list')
       return
     }
-    this.registry.replace(nodes)
+    this.logNetworkOnce(nodes)
+    if (this.registry.replace(nodes)) {
+      // Not fatal — the registry kept what it already knew — but it means the
+      // answer was produced mid-interview, so say so rather than leaving the
+      // user with a Discovery screen that silently lags the network.
+      this.logger.warn(
+        'The getNodes answer was missing values already known; keeping them. ' +
+          'zwave-js-ui was probably still interviewing.',
+      )
+    }
     await this.publishDiscovered()
+    this.publishKnownStates()
+  }
+
+  /**
+   * Write the network to the journal, once per start.
+   *
+   * Until an integration can offer a diagnostics page of its own, the journal
+   * is the only place a user can copy something out of, and "it does not
+   * work" is otherwise impossible to act on remotely.
+   *
+   * The summary is always printed: one line per node, and it is precisely what
+   * separates a half-interviewed node (`ready=false`, no value) from a healthy
+   * one — the difference behind devices published with no feature at all.
+   *
+   * The full JSON is NOT printed here: it weighs a few hundred kilobytes on a
+   * real network and has no place in every start. It is one click away, in the
+   * `dump_nodes` manifest action.
+   */
+  private logNetworkOnce(nodes: readonly ZwaveNode[]): void {
+    if (this.networkLogged) {
+      return
+    }
+    this.networkLogged = true
+    this.logNetwork(nodes)
+  }
+
+  /** One line per node: id, name, interview state and how many values it has. */
+  private logNetwork(nodes: readonly ZwaveNode[]): void {
+    this.logger.info(`Z-Wave network: ${countEn(nodes.length, 'node', 'nodes')}`)
+    for (const node of nodes) {
+      const values = countEn(Object.keys(node.values ?? {}).length, 'value', 'values')
+      const name = node.name?.trim() || node.productLabel || '(unnamed)'
+      this.logger.info(
+        `  node ${node.id}: ${name} — ready=${node.ready === true} ` +
+          `status=${node.status ?? 'unknown'} ${values}${node.virtual === true ? ' (virtual)' : ''}`,
+      )
+    }
   }
 
   private onValueUpdated(message: NodeValueUpdatedEvent): void {
@@ -238,8 +299,11 @@ export class ZwaveIntegration {
     if (!node || !value) {
       return
     }
-    // The event carries the whole node: keep the cached view warm for free.
-    this.registry.upsert(node)
+    // The event carries the node alongside the value: keep the cached view
+    // warm for free, without letting a partial announcement amputate it.
+    if (this.registry.upsert(node)) {
+      this.requestResynchronization(node.id)
+    }
     this.states.push(this.mapper.convertValue(node, value, value.newValue))
   }
 
@@ -248,7 +312,9 @@ export class ZwaveIntegration {
     if (!node) {
       return
     }
-    this.registry.upsert(node)
+    if (this.registry.upsert(node)) {
+      this.requestResynchronization(node.id)
+    }
     this.requestDiscoveryPublication()
   }
 
@@ -318,6 +384,36 @@ export class ZwaveIntegration {
     }
   }
 
+  /**
+   * Manifest action: write the whole network to the journal.
+   *
+   * An integration has no diagnostics page of its own yet, and `LOG_LEVEL` is
+   * not something a user can reach — the supervisor owns the container. So the
+   * dump is a button: one click, and the user has something to paste into a
+   * bug report.
+   *
+   * What it prints is what the integration SEES, not the raw MQTT payload:
+   * that is the view discovery is computed from, so it is the one that
+   * explains a device published with a feature missing.
+   */
+  dumpNodes(): MultiLanguageMessage {
+    const nodes = this.registry.all()
+    if (nodes.length === 0) {
+      return {
+        en: 'No Z-Wave node known yet. Check the connection first.',
+        fr: "Aucun nœud Z-Wave connu pour l'instant. Vérifiez d'abord la connexion.",
+      }
+    }
+
+    this.logNetwork(nodes)
+    this.logger.info(`Known nodes: ${JSON.stringify({ success: true, result: nodes })}`)
+
+    return {
+      en: `${countEn(nodes.length, 'node', 'nodes')} written to the journal.`,
+      fr: `${countFr(nodes.length, 'nœud écrit', 'nœuds écrits')} dans le journal.`,
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Helpers
   // -------------------------------------------------------------------------
@@ -342,6 +438,31 @@ export class ZwaveIntegration {
     this.discoveryTimer.unref?.()
   }
 
+  /**
+   * Ask zwave-js-ui for the full picture again.
+   *
+   * A node event that carries fewer values than we already hold means the
+   * announcement was partial — typically a zwave-js-ui restart re-announcing
+   * its nodes before interviewing them. `getNodes` is the source of truth, so
+   * rather than guessing when the network will settle, we ask.
+   *
+   * Debounced, and never re-armed while one is pending: a restart announces
+   * every node, and one dump answers for all of them.
+   */
+  private requestResynchronization(nodeId: number): void {
+    if (this.resyncTimer) {
+      return
+    }
+    this.logger.info(
+      `Node ${nodeId} was announced without values it had before; asking zwave-js-ui for a full node list`,
+    )
+    this.resyncTimer = setTimeout(() => {
+      this.resyncTimer = undefined
+      this.client.requestNodes()
+    }, RESYNC_DEBOUNCE_MS)
+    this.resyncTimer.unref?.()
+  }
+
   private async publishDiscovered(): Promise<void> {
     if (this.publishingDiscovery) {
       this.discoveryPending = true
@@ -364,6 +485,27 @@ export class ZwaveIntegration {
       } while (this.discoveryPending)
     } finally {
       this.publishingDiscovery = false
+    }
+  }
+
+  /**
+   * Republish what the network already told us about the devices the user has
+   * created.
+   *
+   * A Z-Wave value that never changes is only ever reported when the node is
+   * interviewed: `isLow` on a battery, a door that stays shut, a thermostat
+   * mode nobody touches. `onDeviceCreated` snapshots the node it just got, but
+   * nothing did it for a device that ALREADY existed — so a feature added by a
+   * new version of this integration stayed empty until the node happened to
+   * change, which on a sleeping sensor can take months.
+   *
+   * The `getNodes` answer carries those values, so publish them on every full
+   * refresh. It costs nothing on a steady network: the publisher drops every
+   * feature the user did not create, and deduplicates the rest.
+   */
+  private publishKnownStates(): void {
+    for (const node of this.registry.all()) {
+      this.states.push(this.mapper.snapshot(node))
     }
   }
 

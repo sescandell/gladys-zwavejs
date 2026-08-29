@@ -1,17 +1,34 @@
-import type { DeviceState, Logger } from '@gladysassistant/integration-sdk'
+import type {
+  Device,
+  DeviceState,
+  GladysIntegration,
+  Logger,
+} from '@gladysassistant/integration-sdk'
 
-/** A logger that records instead of printing, so tests can assert on warnings. */
-export function createFakeLogger(): Logger & { warnings: string[]; errors: string[] } {
-  const warnings: string[] = []
-  const errors: string[] = []
-  const logger: Logger & { warnings: string[]; errors: string[] } = {
-    debug: () => {},
-    info: () => {},
-    warn: (...args: unknown[]) => warnings.push(args.map(String).join(' ')),
-    error: (...args: unknown[]) => errors.push(args.map(String).join(' ')),
+/** Everything a fake logger records, by level. */
+export interface RecordedLogs {
+  debugs: string[]
+  infos: string[]
+  warnings: string[]
+  errors: string[]
+}
+
+const record =
+  (lines: string[]) =>
+  (...args: unknown[]) => {
+    lines.push(args.map(String).join(' '))
+  }
+
+/** A logger that records instead of printing, so tests can assert on output. */
+export function createFakeLogger(): Logger & RecordedLogs {
+  const logs: RecordedLogs = { debugs: [], infos: [], warnings: [], errors: [] }
+  const logger: Logger & RecordedLogs = {
+    debug: record(logs.debugs),
+    info: record(logs.infos),
+    warn: record(logs.warnings),
+    error: record(logs.errors),
     child: () => logger,
-    warnings,
-    errors,
+    ...logs,
   }
   return logger
 }
@@ -48,4 +65,27 @@ export function createFakeClock(start = 1_000_000) {
       current += ms
     },
   }
+}
+
+/**
+ * The Gladys host, reduced to what ZwaveIntegration actually calls. The cast
+ * is deliberate: implementing the whole SDK class would test the SDK, not us.
+ */
+export function createFakeGladys(selector = 'test-selector') {
+  const published: DeviceState[] = []
+  const discovered: Device[][] = []
+  const gladys = {
+    selector,
+    devices: [] as Device[],
+    externalId: (suffix: string) => `ext:${selector}:${suffix}`,
+    publishStates: async (states: DeviceState[]) => {
+      published.push(...states)
+    },
+    publishDiscoveredDevices: async (devices: Device[]) => {
+      discovered.push(devices)
+    },
+    setConnectionStatus: async () => {},
+    getConfig: async () => ({}),
+  }
+  return { published, discovered, gladys: gladys as unknown as GladysIntegration }
 }
