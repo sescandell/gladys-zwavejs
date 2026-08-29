@@ -6,8 +6,8 @@
     "en": "Control your Z-Wave network in Gladys through Z-Wave JS UI and MQTT.",
     "fr": "Pilotez votre réseau Z-Wave dans Gladys via Z-Wave JS UI et MQTT."
   },
-  "version": "1.6.0",
-  "docker_image": "ghcr.io/sescandell/gladys-zwavejs:1.6.0",
+  "version": "1.7.0",
+  "docker_image": "ghcr.io/sescandell/gladys-zwavejs:1.7.0",
   "gladys_version": ">=4.85.0",
   "cover_image": "https://raw.githubusercontent.com/Sescandell/gladys-zwavejs/master/cover.png",
   "transports": [
