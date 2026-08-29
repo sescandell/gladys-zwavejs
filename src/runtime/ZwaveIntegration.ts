@@ -244,7 +244,6 @@ export class ZwaveIntegration {
       this.logger.warn('Received a getNodes answer without a node list')
       return
     }
-    this.logNetworkOnce(nodes)
     if (this.registry.replace(nodes)) {
       // Not fatal — the registry kept what it already knew — but it means the
       // answer was produced mid-interview, so say so rather than leaving the
@@ -254,6 +253,7 @@ export class ZwaveIntegration {
           'zwave-js-ui was probably still interviewing.',
       )
     }
+    this.logNetworkOnce()
     await this.publishDiscovered()
     this.publishKnownStates()
   }
@@ -269,16 +269,32 @@ export class ZwaveIntegration {
    * separates a half-interviewed node (`ready=false`, no value) from a healthy
    * one — the difference behind devices published with no feature at all.
    *
-   * The full JSON is NOT printed here: it weighs a few hundred kilobytes on a
-   * real network and has no place in every start. It is one click away, in the
-   * `dump_nodes` manifest action.
+   * The devices follow, because a node is only half the story: what the user
+   * looks for is the feature that should be there and is not. The full JSON is
+   * one click away, in the `dump_devices` manifest action.
    */
-  private logNetworkOnce(nodes: readonly ZwaveNode[]): void {
+  private logNetworkOnce(): void {
     if (this.networkLogged) {
       return
     }
     this.networkLogged = true
+
+    const nodes = this.registry.all()
     this.logNetwork(nodes)
+    this.logDevices(this.mapper.toDiscoveredDevices(nodes))
+  }
+
+  /** One line per device: what this integration publishes, and with what. */
+  private logDevices(devices: readonly Device[]): void {
+    this.logger.info(`Devices published to Gladys: ${devices.length}`)
+    for (const device of devices) {
+      const categories = device.features?.map((feature) => feature.category).join(', ')
+      this.logger.info(
+        `  ${device.external_id} "${device.name}" — ` +
+          `${countEn(device.features?.length ?? 0, 'feature', 'features')}` +
+          `${categories ? `: ${categories}` : ''}`,
+      )
+    }
   }
 
   /** One line per node: id, name, interview state and how many values it has. */
@@ -385,32 +401,32 @@ export class ZwaveIntegration {
   }
 
   /**
-   * Manifest action: write the whole network to the journal.
+   * Manifest action: write the computed devices to the journal.
    *
    * An integration has no diagnostics page of its own yet, and `LOG_LEVEL` is
-   * not something a user can reach — the supervisor owns the container. So the
-   * dump is a button: one click, and the user has something to paste into a
-   * bug report.
+   * not something a user can reach — the supervisor owns the container. So this
+   * is a button: one click, and the user has something to paste into a report.
    *
-   * What it prints is what the integration SEES, not the raw MQTT payload:
-   * that is the view discovery is computed from, so it is the one that
-   * explains a device published with a feature missing.
+   * What it prints is the discovery payload itself — the devices and features
+   * built from the network, exactly what Gladys is sent. That is the answer to
+   * "why is this feature missing?", where the raw Z-Wave dump only shows the
+   * input. It is also small: a few kilobytes, against hundreds for the nodes.
    */
-  dumpNodes(): MultiLanguageMessage {
-    const nodes = this.registry.all()
-    if (nodes.length === 0) {
+  dumpDevices(): MultiLanguageMessage {
+    const devices = this.mapper.toDiscoveredDevices(this.registry.all())
+    if (devices.length === 0) {
       return {
         en: 'No Z-Wave node known yet. Check the connection first.',
         fr: "Aucun nœud Z-Wave connu pour l'instant. Vérifiez d'abord la connexion.",
       }
     }
 
-    this.logNetwork(nodes)
-    this.logger.info(`Known nodes: ${JSON.stringify({ success: true, result: nodes })}`)
+    this.logDevices(devices)
+    this.logger.info(`Discovered devices: ${JSON.stringify(devices)}`)
 
     return {
-      en: `${countEn(nodes.length, 'node', 'nodes')} written to the journal.`,
-      fr: `${countFr(nodes.length, 'nœud écrit', 'nœuds écrits')} dans le journal.`,
+      en: `${countEn(devices.length, 'device', 'devices')} written to the journal.`,
+      fr: `${countFr(devices.length, 'appareil écrit', 'appareils écrits')} dans le journal.`,
     }
   }
 

@@ -122,15 +122,15 @@
       }
     },
     {
-      "key": "dump_nodes",
+      "key": "dump_devices",
       "timeout_seconds": 20,
       "label": {
-        "en": "Log the node details",
-        "fr": "Journaliser le détail des nœuds"
+        "en": "Log the computed devices",
+        "fr": "Journaliser les appareils calculés"
       },
       "description": {
-        "en": "Write the full JSON of the known Z-Wave nodes to the journal, to attach to a bug report.",
-        "fr": "Écrit dans le journal le JSON complet des nœuds Z-Wave connus, à joindre à un rapport de bug."
+        "en": "Write to the journal the devices and features this integration builds from the Z-Wave network — what Gladys is sent.",
+        "fr": "Écrit dans le journal les appareils et fonctionnalités que l'intégration construit à partir du réseau Z-Wave — ce qui est envoyé à Gladys."
       }
     }
   ]

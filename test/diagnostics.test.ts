@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
+import type { Device } from '@gladysassistant/integration-sdk'
+
 import { ZwaveIntegration } from '../src/runtime/ZwaveIntegration.ts'
 import type { GetNodesResponse, ZwaveNode } from '../src/types/zwave.ts'
 import { createFakeGladys, createFakeLogger } from './helpers/fakes.ts'
@@ -50,32 +52,45 @@ test('a half-interviewed node is visible as such', async () => {
   await integration.stop()
 })
 
-test('the dump_nodes button writes the whole network to the journal', async () => {
+test('the dump_devices button writes what Gladys is sent', async () => {
   const answer = readAnswer()
   const logger = createFakeLogger()
-  const integration = new ZwaveIntegration(createFakeGladys().gladys, logger)
+  const { gladys, discovered } = createFakeGladys()
+  const integration = new ZwaveIntegration(gladys, logger)
   await (integration as unknown as NodesHandler).onNodes(answer)
 
-  const message = integration.dumpNodes()
-  assert.match(message.fr ?? '', /10 nœuds écrits dans le journal/)
+  const message = integration.dumpDevices()
+  assert.match(message.fr ?? '', /9 appareils écrits dans le journal/)
 
-  const dump = logger.infos.find((line) => line.startsWith('Known nodes: '))
-  assert.ok(dump, 'the button must log the nodes')
-  // It has to survive a copy-paste back into a fixture, or it is worthless.
-  const parsed = JSON.parse(dump.slice('Known nodes: '.length)) as GetNodesResponse
-  assert.equal(parsed.result?.length, answer.result?.length)
-  assert.deepEqual(
-    parsed.result?.map((node) => node.id),
-    answer.result?.map((node) => node.id),
+  const dump = logger.infos.find((line) => line.startsWith('Discovered devices: '))
+  assert.ok(dump, 'the button must log the devices')
+  // The whole point: it must be the discovery payload, not a paraphrase of it.
+  const parsed = JSON.parse(dump.slice('Discovered devices: '.length)) as Device[]
+  assert.deepEqual(parsed, discovered.at(-1))
+
+  await integration.stop()
+})
+
+test('the computed features are listed per device, category by category', async () => {
+  const logger = createFakeLogger()
+  const integration = new ZwaveIntegration(createFakeGladys().gladys, logger)
+  await (integration as unknown as NodesHandler).onNodes(readAnswer())
+
+  const summary = logger.infos.join('\n')
+  assert.match(summary, /Devices published to Gladys: 9/)
+  // A missing battery-low is exactly what this has to make visible.
+  assert.match(
+    summary,
+    /:50 "50 - Fibargroup Motion Sensor FGMS001" — 5 features: motion-sensor, temperature-sensor, light-sensor, battery, battery-low/,
   )
 
   await integration.stop()
 })
 
-test('the dump_nodes button says so when nothing is known yet', async () => {
+test('the dump_devices button says so when nothing is known yet', async () => {
   const integration = new ZwaveIntegration(createFakeGladys().gladys, createFakeLogger())
 
-  assert.match(integration.dumpNodes().fr ?? '', /Aucun nœud/)
+  assert.match(integration.dumpDevices().fr ?? '', /Aucun nœud/)
 
   await integration.stop()
 })

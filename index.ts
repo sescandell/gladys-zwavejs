@@ -25,7 +25,7 @@ gladys.onDeviceCreated((device) => integration.onDeviceCreated(device))
 gladys.onDeviceUpdated((device) => integration.onDeviceUpdated(device))
 gladys.onDeviceDeleted((device) => integration.onDeviceDeleted(device))
 gladys.onAction('test_connection', () => integration.testConnection())
-gladys.onAction('dump_nodes', () => integration.dumpNodes())
+gladys.onAction('dump_devices', () => integration.dumpDevices())
 
 // Nothing survives a disconnection (the protocol has no queue): the SDK
 // resynchronizes the devices and the configuration, and we redo our own
