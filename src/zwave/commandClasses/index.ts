@@ -1,7 +1,7 @@
-import type { ZwaveDeviceClass } from '../../types/zwave.ts'
+import type { ZwaveDeviceClass, ZwaveNode, ZwaveValue } from '../../types/zwave.ts'
 import { clean } from '../../mapping/clean.ts'
 import { alarmSensor } from './alarmSensor.ts'
-import { battery } from './battery.ts'
+import { battery, derivedBatteryValues } from './battery.ts'
 import { binarySensor } from './binarySensor.ts'
 import { binarySwitch } from './binarySwitch.ts'
 import { centralScene } from './centralScene.ts'
@@ -173,4 +173,12 @@ export function resolveCommand(
   }
 
   return undefined
+}
+
+/**
+ * Values a node should expose but no longer publishes. Today only the Battery
+ * low flag, dropped from `getNodes` by zwave-js 15.10.0 — see `battery.ts`.
+ */
+export function derivedValues(node: ZwaveNode): ZwaveValue[] {
+  return derivedBatteryValues(node)
 }

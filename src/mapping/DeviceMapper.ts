@@ -2,7 +2,7 @@ import type { Device, DeviceFeature } from '@gladysassistant/integration-sdk'
 
 import type { PendingState } from '../runtime/state.ts'
 import type { ZwaveNode, ZwaveValue } from '../types/zwave.ts'
-import { getCommandClass, resolveVariant } from '../zwave/commandClasses/index.ts'
+import { derivedValues, getCommandClass, resolveVariant } from '../zwave/commandClasses/index.ts'
 import type { ExposedFeature, FeatureSpec } from '../zwave/commandClasses/types.ts'
 import { buildFeatureName } from './featureName.ts'
 import { deviceSuffix, featureSuffix } from './externalId.ts'
@@ -52,7 +52,9 @@ export class DeviceMapper {
   toDiscoveredDevice(node: ZwaveNode): Device {
     const mapped: Array<MappedFeature<DeviceFeature>> = []
 
-    for (const value of Object.values(node.values ?? {})) {
+    // Derived values come last: they only exist where the node stopped
+    // publishing something it used to, and they must not shadow a real value.
+    for (const value of [...Object.values(node.values ?? {}), ...derivedValues(node)]) {
       const module = getCommandClass(value.commandClassName)
       if (!module) {
         continue
@@ -114,6 +116,9 @@ export class DeviceMapper {
 
     const states: PendingState[] = []
     for (const converter of variant.fromZwave) {
+      if (converter.when && !converter.when(node)) {
+        continue
+      }
       const state = converter.convert(raw)
       if (state === null) {
         continue

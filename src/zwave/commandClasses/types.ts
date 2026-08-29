@@ -1,4 +1,4 @@
-import type { ZwaveValue } from '../../types/zwave.ts'
+import type { ZwaveNode, ZwaveValue } from '../../types/zwave.ts'
 
 /**
  * A Gladys device feature template, in the standard discovered-device format.
@@ -45,6 +45,12 @@ export interface ExposedFeature {
 
 /** Converts one raw Z-Wave value into one Gladys state. */
 export interface StateConverter {
+  /**
+   * Runs only when this returns true. Lets a converter depend on the node as a
+   * whole rather than on its own value — the Battery level feeds the low
+   * battery flag, but ONLY on nodes that do not report the flag themselves.
+   */
+  readonly when?: (node: ZwaveNode) => boolean
   /** Target feature name, '' by default. */
   readonly featureName?: string
   /** Target property, when the update lands on a sibling property. */
