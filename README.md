@@ -5,6 +5,9 @@ network into [Gladys Assistant](https://gladysassistant.com), over MQTT.
 
 User documentation: [`docs/en.md`](./docs/en.md) · [`docs/fr.md`](./docs/fr.md)
 
+Extending the integration: [`AGENTS.md`](./AGENTS.md) — the mechanisms a
+command class module can use, and the rules that must hold.
+
 ## How it works
 
 ```
