@@ -4,13 +4,10 @@ import type { PendingState } from '../runtime/state.ts'
 import type { ZwaveNode, ZwaveValue } from '../types/zwave.ts'
 import { derivedValues, getCommandClass, resolveVariant } from '../zwave/commandClasses/index.ts'
 import type { ExposedFeature, FeatureSpec } from '../zwave/commandClasses/types.ts'
-import { buildFeatureName } from './featureName.ts'
 import { deviceParams } from './deviceParams.ts'
+import { buildFeatureName } from './featureName.ts'
 import { deviceSuffix, featureSuffix } from './externalId.ts'
 import { applyQuirks, type MappedFeature } from './quirks.ts'
-
-/** Name of the Gladys device param carrying the Z-Wave JS UI location. */
-const LOCATION_PARAM = 'location'
 
 /**
  * A device name that is never empty.
@@ -87,7 +84,7 @@ export class DeviceMapper {
       name: buildDeviceName(node),
       external_id: this.externalId(deviceSuffix(node.id)),
       features: applyQuirks(mapped, node).map((entry) => entry.feature),
-      params: [{ name: LOCATION_PARAM, value: node.loc ?? '' }, ...deviceParams(node)],
+      params: deviceParams(node),
     }
   }
 

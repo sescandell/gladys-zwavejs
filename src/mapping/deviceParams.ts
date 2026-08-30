@@ -7,6 +7,9 @@ interface StateOption {
   readonly value: number
 }
 
+/** Gladys device param carrying the Z-Wave JS UI location of the node. */
+const LOCATION_PARAM = 'location'
+
 const CONFIGURATION_CC = 112
 
 /**
@@ -27,11 +30,8 @@ const CONFIG_PARAMS: Readonly<Record<string, readonly number[]>> = {
   '634-4-272': [8],
 }
 
-/**
- * Extra Gladys device params (name/value) derived from a node's configuration,
- * appended after the location. Never produces a feature or an external id.
- */
-export function deviceParams(node: ZwaveNode): Array<{ name: string; value: string }> {
+/** The configuration params surfaced for a node, decoded to their state label. */
+function configParams(node: ZwaveNode): Array<{ name: string; value: string }> {
   const properties = CONFIG_PARAMS[node.deviceId ?? '']
   if (!properties) {
     return []
@@ -48,4 +48,13 @@ export function deviceParams(node: ZwaveNode): Array<{ name: string; value: stri
     const label = states.find((state) => state.value === value.value)?.text
     return [{ name: clean(value.propertyName), value: label ?? String(value.value) }]
   })
+}
+
+/**
+ * Every Gladys device param (name/value) of a node, in display order: the
+ * Z-Wave JS UI location first, then the nominative configuration parameters.
+ * Never produces a feature or an external id.
+ */
+export function deviceParams(node: ZwaveNode): Array<{ name: string; value: string }> {
+  return [{ name: LOCATION_PARAM, value: node.loc ?? '' }, ...configParams(node)]
 }
