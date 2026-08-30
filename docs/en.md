@@ -73,7 +73,7 @@ Features are derived from the Z-Wave command classes a node exposes:
 | Multilevel Switch (dimmer)          | brightness, on/off, "restore previous"                |
 | Multilevel Switch (window covering) | shutter position, open/close/stop                     |
 | Binary Sensor / Alarm Sensor        | motion, smoke, CO, CO₂, leak, opening, temperature    |
-| Notification                        | door/window opening                                   |
+| Notification                        | door/window opening, smoke alarm, CO alarm            |
 | Multilevel Sensor                   | temperature, illuminance, power                       |
 | Meter                               | energy, power, voltage, current                       |
 | Central Scene                       | button clicks (single, double, triple, hold, release) |

@@ -78,7 +78,7 @@ nœud :
 | Multilevel Switch (variateur) | luminosité, on/off, « restaurer l'état précédent »           |
 | Multilevel Switch (volet)     | position du volet, ouvrir/fermer/stop                        |
 | Binary Sensor / Alarm Sensor  | mouvement, fumée, CO, CO₂, fuite, ouverture, température     |
-| Notification                  | ouverture de porte/fenêtre                                   |
+| Notification                  | ouverture de porte/fenêtre, alarme fumée, alarme CO          |
 | Multilevel Sensor             | température, luminosité, puissance                           |
 | Meter                         | énergie, puissance, tension, courant                         |
 | Central Scene                 | appuis de bouton (simple, double, triple, maintenu, relâché) |
