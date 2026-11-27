@@ -29,6 +29,9 @@ const manifest = JSON.parse(
   docker_image: string
   config_schema: ConfigField[]
   actions: Array<{ key: string; label: Record<string, string>; timeout_seconds?: number }>
+  gladys_version: string
+  categories: string[]
+  keywords: string[]
 }
 
 const packageJson = JSON.parse(
@@ -114,4 +117,28 @@ test('the manifest version and the package version stay in lockstep', () => {
     manifest.docker_image.endsWith(`:${manifest.version}`),
     'docker_image must be tagged with the manifest version',
   )
+})
+
+test('the catalog finds it: Protocols section and search keywords', () => {
+  // The catalog search ignores case and accents but not the hyphen: "zwave"
+  // must reach "Z-Wave JS UI", not only the deprecated built-in integration.
+  assert.deepEqual(manifest.categories, ['protocols'])
+  assert.ok(manifest.keywords.includes('zwave'))
+  assert.ok(manifest.keywords.length >= 1 && manifest.keywords.length <= 10)
+  const terms = manifest.keywords.map((term) => term.trim().toLowerCase())
+  assert.equal(new Set(terms).size, terms.length, 'keywords must be unique')
+  for (const term of terms) {
+    assert.ok(
+      term.length >= 2 && term.length <= 30,
+      `keyword "${term}" must hold 2 to 30 characters`,
+    )
+  }
+})
+
+test('keywords need Gladys >= 5.3.0 (older cores reject the field)', () => {
+  const match = manifest.gladys_version.match(/>=\s*(\d+)\.(\d+)/)
+  assert.ok(match, 'gladys_version must declare a minimum version')
+  const major = Number(match[1])
+  const minor = Number(match[2])
+  assert.ok(major > 5 || (major === 5 && minor >= 3), `got "${manifest.gladys_version}"`)
 })
